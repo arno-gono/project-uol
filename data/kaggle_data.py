@@ -1,41 +1,22 @@
 import kagglehub
 import pandas as pd
 import os
-import sqlite3
-
-# other dataset to try:
-# olistbr/brazilian-ecommerce
-# shrinivasv/retail-store-star-schema-dataset
-# rikdifos/credit-card-approval-prediction
-
-kaggle_dataset_name = "rikdifos/credit-card-approval-prediction"
+from data.sqlite_connector import connecting_to_sqlite
+from config import KAGGLE_DATASET_NAME
 
 
-def download_data_from_kaggle(kaggle_dataset_name: str):
-    # kaggle_dataset_name has the format "owner_data/dataset_name"
-    path = kagglehub.dataset_download(kaggle_dataset_name)
 
-    print(f"{len(os.listdir(path))} files from {kaggle_dataset_name} downloaded to: \n{path}")
+def download_data_from_kaggle(kaggle_dataset: str):
+    # kaggle_dataset has the format "owner_data/dataset_name"
+    path = kagglehub.dataset_download(kaggle_dataset)
+
+    print(f"{len(os.listdir(path))} files from {kaggle_dataset} downloaded to: \n{path}")
     return path
 
 
-def connecting_to_sqlite(kaggle_dataset_name: str):
-    # we need a name for the db files. we will use the second part of the kaggle_dataset_name
-    db_name = kaggle_dataset_name.split("/")[-1]
-    db_name = db_name.replace("-", "_")  # using database conventions
-    db_name = f"{db_name}.db"
-
-    # all db files are stored within a specific folder
-    rel_path_db_file = f"db_files/{db_name}"
-
-    # sqlite connector
-    conn = sqlite3.connect(rel_path_db_file)
-    return conn
-
-
-def upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset_name: str):
+def upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
     # getting a connection to sqlite database (or creating one if it does not exist)
-    conn = connecting_to_sqlite(kaggle_dataset_name)
+    conn = connecting_to_sqlite(kaggle_dataset)
 
     # looping through the csv files from Kaggle and uploading to sqlite
     for file in os.listdir(path_kaggle_data):
@@ -46,33 +27,78 @@ def upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset_name: str):
         table_name = file.split(".")[0]
         df.to_sql(table_name, conn, if_exists="replace", index=False)
 
-    print(f"Created tables in SQlite")
-    print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
-
     # closing connection
     conn.close()
 
     return None
 
 
-def create_sqlite_view(kaggle_dataset_name: str):
-    conn = connecting_to_sqlite(kaggle_dataset_name)
-    
+def create_sqlite_view(kaggle_dataset: str):
+    conn = connecting_to_sqlite(kaggle_dataset)
+
+    # declare the view as a string
+
+    view_query = """
+                    CREATE VIEW V_TEST_TABLE AS
+                    SELECT 
+                        CR.ID, 
+                        CR.MONTHS_BALANCE,
+                        CR.STATUS,
+                        AR.NAME_INCOME_TYPE,
+                        AR.NAME_FAMILY_STATUS
+                    FROM 
+                        CREDIT_RECORD CR
+                    LEFT JOIN
+                        APPLICATION_RECORD AR
+                    ON 
+                        CR.ID = AR.ID
+                    WHERE
+                        AR.NAME_FAMILY_STATUS = 'Married'
+                    LIMIT 50
+                """
+
+    # dropping the current view if it already exists
+    conn.execute("DROP VIEW IF EXISTS V_TEST_TABLE")
+
+    # now creating the view
+    conn.execute(view_query)
 
     conn.close()
     return None
 
-def main_data_to_sqlite(kaggle_dataset_name: str):
+def main_data_to_sqlite(kaggle_dataset: str):
 
     # downloading data into a default folder used by Kaggle as csv files,
     # and getting the path where the files are located.
-    path_kaggle_data = download_data_from_kaggle(kaggle_dataset_name)
+    path_kaggle_data = download_data_from_kaggle(kaggle_dataset)
 
     # loading all csv files as db files - recreating a production environment
-    upload_files_to_sqlite(path_kaggle_data, kaggle_dataset_name)
+    upload_files_to_sqlite(path_kaggle_data, kaggle_dataset)
 
-    # creating a view - one-off and specific to the kaggle dataset that was chosen
-    create_sqlite_view(kaggle_dataset_name)
+    # Run the following function create_sqlite_view(kaggle_dataset) to create a view. Make sure
+    # it is actually a view that works with the selected dataset
 
     return None
+
+
+if __name__ == "__main__":
+    # open a connection
+    conn = connecting_to_sqlite(KAGGLE_DATASET_NAME)
+
+    print("Hello")
+
+    main_data_to_sqlite(KAGGLE_DATASET_NAME)
+
+    # check existing tables
+    print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
+
+    create_sqlite_view(KAGGLE_DATASET_NAME)
+
+    # open a table / view as df
+    table_name = "v_test_table"
+    # df = pd.read_sql(f"SELECT * FROM {table_name} LIMIT 10", conn)
+
+    conn.close()
+    print("END")
+
 
