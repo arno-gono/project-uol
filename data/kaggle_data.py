@@ -39,7 +39,7 @@ def create_sqlite_view(kaggle_dataset: str):
     # declare the view as a string
 
     view_query = """
-                    CREATE VIEW V_TEST_TABLE AS
+                    CREATE VIEW v_test_table AS
                     SELECT 
                         CR.ID, 
                         CR.MONTHS_BALANCE,
