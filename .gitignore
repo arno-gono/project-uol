@@ -219,3 +219,7 @@ __marimo__/
 
 # Others
 /.idea
+.kaggle/acces_token
+*.db
+data/.DS_Store
+.DS_Store
