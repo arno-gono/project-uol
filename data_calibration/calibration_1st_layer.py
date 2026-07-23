@@ -1,8 +1,10 @@
-import numpy as np
+import json
+import os
 
-from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME
+from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB
 from data.sqlite_connector import connecting_to_sqlite
 import pandas as pd
+import numpy as np
 import sqlite3
 
 
@@ -19,15 +21,9 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
     # Main dict of metadata, containing nested dictionaries.
     dict_metadata = {}
 
-    # Nested dictionaries.
-    # Column names and column types
-    dict_col_types = {}
-
     # Correlations
     dict_correlations = {}
-
-    # Distributions
-    dict_distributions = {}
+    numerical_cols = []  # listing all numerical columns to calculate correlations between them
 
     # Now getting the actual table to gather data
     df = pd.read_sql(f"SELECT * FROM {table_name}", co)
@@ -35,8 +31,39 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
     # df.describe() returns distribution data already that we will save as well
     df_dist = df.describe()
 
+    # Main data
+    nb_entries = len(df)
+    nb_columns = len(df.columns)
+
+    dict_metadata["nb_entries"] = nb_entries
+    dict_metadata["nb_columns"] = nb_columns
+    dict_metadata["columns_details"] = {}
+
     # First step: getting the column names and types
     for col_name, dtype in df.dtypes.items():
+        dict_column = {}
+
+        # Checking the unique values
+        unique_values = list(df[col_name].unique())
+
+        if len(unique_values) <= MAX_CARDINALITY_NB:
+            categorical_field = True
+            dict_categories = {}
+
+            # looping through the value_counts method, listing each category and the absolute number of times they
+            # appear in the table
+            for i, value in df[col_name].value_counts(normalize=True).items():
+                dict_categories[i] = value # Storing the relative value
+
+            dict_column["cardinality_distribution"] = dict_categories
+
+        # Add a check for Nulls
+        if df[col_name].isna().any():
+            dict_column["null_values"] = True
+        else:
+            dict_column["null_values"] = False
+
+        # Data dependent on the column type
         temp_type = str(dtype)
 
         # Checking if this data type is referenced in type_map
@@ -51,21 +78,21 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
         if set(df[col_name].unique()).issubset({"Y", "N"}) or set(df[col_name].unique()).issubset({0, 1}):
             temp_type = "bool"
 
-        dict_col_types[col_name] = type_map[temp_type]
-
-        # Add a check for Nulls
+        dict_column["datatype"] = type_map[temp_type]
 
         # Now checking the distribution if the field is numerical
         if type_map[temp_type] in ["float", "int"]:
-            dict_distributions[col_name] = df_dist[col_name].to_dict()
+            numerical_cols.append(col_name)
+            dict_column["distributions"] = df_dist[col_name].to_dict()
 
-
+        # Adding column's metadata to the table metadata
+        dict_metadata["columns_details"][col_name] = dict_column
 
 
     return dict_metadata
 
 
-def dataset_calibration(kaggle_dataset: str = KAGGLE_DATASET_NAME):
+def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME):
     # This function loops through all tables and views available in the dataset passed as argument.
     # For each table, we save the metadata as a dictionary, and aggregate them in a list of dictionaries.
     # Once all the data is collected, it is written as a json file.
@@ -75,21 +102,35 @@ def dataset_calibration(kaggle_dataset: str = KAGGLE_DATASET_NAME):
     # Getting the scope of tables / views
     df = pd.read_sql("SELECT * FROM sqlite_master", conn)
 
+    dict_metadata = {}
+
     for n, t in zip(df["name"], df["type"]):
-        mt_data = _get_metadata_from_table(table_name=n, co=conn)
-
-
-
-
+        dict_table_metadata = _get_metadata_from_table(table_name=n, co=conn)
+        dict_metadata[n] = {"type": t} | dict_table_metadata
 
     conn.close()
+
+    return dict_metadata
+
+
+def _save_metadata(dict_data: dict, dataset_name: str = DB_NAME):
+    # Saving data under the name of the dataset name
+    path_json_file = os.path.join(DB_DIR, f"{dataset_name}.json")
+
+    with open(path_json_file, "w") as f:
+        json.dump(dict_data, f, indent=4, default=str)
+
     return None
 
 
+def dataset_calibration():
+    # Full analysis of each table of the dataset
+    dict_metadata = _aggregate_metadata()
 
+    # Saving the data as a json file
+    _save_metadata(dict_data=dict_metadata, dataset_name=DB_NAME)
 
-# if __name__ == "__main__":
-#     conn = connecting_to_sqlite(KAGGLE_DATASET_NAME)
-#
-#
-#     conn.close()
+    return None
+
+if __name__ == "__main__":
+    dataset_calibration()
