@@ -43,26 +43,6 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
     for col_name, dtype in df.dtypes.items():
         dict_column = {}
 
-        # Checking the unique values
-        unique_values = list(df[col_name].unique())
-
-        if len(unique_values) <= MAX_CARDINALITY_NB:
-            categorical_field = True
-            dict_categories = {}
-
-            # looping through the value_counts method, listing each category and the absolute number of times they
-            # appear in the table
-            for i, value in df[col_name].value_counts(normalize=True).items():
-                dict_categories[i] = value # Storing the relative value
-
-            dict_column["cardinality_distribution"] = dict_categories
-
-        # Add a check for Nulls
-        if df[col_name].isna().any():
-            dict_column["null_values"] = True
-        else:
-            dict_column["null_values"] = False
-
         # Data dependent on the column type
         temp_type = str(dtype)
 
@@ -80,10 +60,29 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
 
         dict_column["datatype"] = type_map[temp_type]
 
+        # Checking unique values
+        unique_values = list(df[col_name].unique())
+
+        if len(unique_values) <= MAX_CARDINALITY_NB:
+            dict_categories = {}
+
+            # looping through the value_counts method, listing each category and the absolute number of times they
+            # appear in the table
+            for i, value in df[col_name].value_counts(normalize=True).items():
+                dict_categories[i] = value # Storing the relative value
+
+            dict_column["cardinality_distribution"] = dict_categories
+
+        # Add a check for Nulls
+        if df[col_name].isna().any():
+            dict_column["null_values"] = True
+        else:
+            dict_column["null_values"] = False
+
         # Now checking the distribution if the field is numerical
         if type_map[temp_type] in ["float", "int"]:
             numerical_cols.append(col_name)
-            dict_column["distributions"] = df_dist[col_name].to_dict()
+            dict_column["values_distribution"] = df_dist[col_name].to_dict()
 
         # Adding column's metadata to the table metadata
         dict_metadata["columns_details"][col_name] = dict_column
