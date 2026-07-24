@@ -17,7 +17,26 @@ type_map = {
 }
 
 
-def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
+def _get_correlation_dict(df: pd.DataFrame):
+    d_correl = {}
+
+    d_correl_raw = df.corr(numeric_only=True).to_dict()
+
+    # half the values repeat themselves. Looping data to only keep pairs once
+    for k1, v1 in d_correl_raw.items():
+        for k2, v2 in v1.items():
+
+            # Skipping data that will not be useful to the agent
+            if f"{k1} | {k2}" in d_correl or f"{k2} | {k1}" in d_correl or k1 == k2 or str(v2) == "nan":
+                continue
+
+            # Adding the correlation value to a temp dictionnary
+            d_correl[f"{k1} | {k2}"] = round(v2, 4)
+
+    return d_correl
+
+
+def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection):
     # Main dict of metadata, containing nested dictionaries.
     dict_metadata = {}
 
@@ -58,6 +77,7 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
         if set(df[col_name].unique()).issubset({"Y", "N"}) or set(df[col_name].unique()).issubset({0, 1}):
             temp_type = "bool"
 
+        # Adding Datatype to the column metadata
         dict_column["datatype"] = type_map[temp_type]
 
         # Checking unique values
@@ -73,6 +93,14 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
 
             dict_column["cardinality_distribution"] = dict_categories
 
+        # Checking if all values are unique, which might be a potential primary key
+        if len(unique_values) == nb_entries:  # and type of data is different from a datetime format
+            dict_column["potential_primary_key"] = True
+
+        # Checking if there are duplicates
+        if df[col_name].duplicated().any():
+            dict_column["duplicates_distribution"] = df.duplicated().sum() / nb_entries
+
         # Add a check for Nulls
         if df[col_name].isna().any():
             dict_column["null_values"] = True
@@ -86,6 +114,9 @@ def _get_metadata_from_table(table_name: str, co: sqlite3.Connection):
 
         # Adding column's metadata to the table metadata
         dict_metadata["columns_details"][col_name] = dict_column
+
+    # Ending with adding correlations between numerical columns
+    dict_metadata["correlations"] = _get_correlation_dict(df=df)
 
 
     return dict_metadata
@@ -104,7 +135,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME):
     dict_metadata = {}
 
     for n, t in zip(df["name"], df["type"]):
-        dict_table_metadata = _get_metadata_from_table(table_name=n, co=conn)
+        dict_table_metadata = _get_metadata_profiling_from_table(table_name=n, co=conn)
         dict_metadata[n] = {"type": t} | dict_table_metadata
 
     conn.close()
@@ -132,4 +163,8 @@ def dataset_calibration():
     return None
 
 if __name__ == "__main__":
-    dataset_calibration()
+    # dataset_calibration()
+
+    table_name = "application_record"
+    kaggle_dataset: str = KAGGLE_DATASET_NAME
+    co = connecting_to_sqlite(kaggle_dataset)
