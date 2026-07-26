@@ -107,7 +107,8 @@ def _create_sqlite_view(kaggle_dataset: str):
     conn.close()
     return None
 
-def main_data_to_sqlite(kaggle_dataset: str):
+
+def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME):
 
     # downloading data into a default folder used by Kaggle as csv files,
     # and getting the path where the files are located.
@@ -131,12 +132,12 @@ if __name__ == "__main__":
     kaggle_dataset = KAGGLE_DATASET_NAME
     print("Hello")
 
-    # main_data_to_sqlite(KAGGLE_DATASET_NAME)
+    download_kaggle_upload_to_sqlite(KAGGLE_DATASET_NAME)
 
     # check existing tables
     print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
 
-    # _create_sqlite_view(KAGGLE_DATASET_NAME)
+    _create_sqlite_view(KAGGLE_DATASET_NAME)
 
     # open a table / view as df
     # table_name = "v_test_table"

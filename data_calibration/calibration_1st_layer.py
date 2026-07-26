@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 
 from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB
 from data.sqlite_connector import connecting_to_sqlite
@@ -17,8 +18,8 @@ type_map = {
 }
 
 
-def _get_correlation_dict(df: pd.DataFrame):
-    d_correl = {}
+def _get_correlation_dict(df: pd.DataFrame) -> dict[str, float]:
+    d_correl: dict[str, float] = {}
 
     d_correl_raw = df.corr(numeric_only=True).to_dict()
 
@@ -30,25 +31,15 @@ def _get_correlation_dict(df: pd.DataFrame):
             if f"{k1} | {k2}" in d_correl or f"{k2} | {k1}" in d_correl or k1 == k2 or str(v2) == "nan":
                 continue
 
-            # Adding the correlation value to a temp dictionnary
+            # Adding the correlation value to a temp dictionary
             d_correl[f"{k1} | {k2}"] = round(v2, 4)
 
     return d_correl
 
 
-def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection):
+def _get_general_data(df: pd.DataFrame) -> dict[str, Any]:
     # Main dict of metadata, containing nested dictionaries.
-    dict_metadata = {}
-
-    # Correlations
-    dict_correlations = {}
-    numerical_cols = []  # listing all numerical columns to calculate correlations between them
-
-    # Now getting the actual table to gather data
-    df = pd.read_sql(f"SELECT * FROM {table_name}", co)
-
-    # df.describe() returns distribution data already that we will save as well
-    df_dist = df.describe()
+    dict_metadata: dict[str, Any] = {}
 
     # Main data
     nb_entries = len(df)
@@ -56,73 +47,108 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection):
 
     dict_metadata["nb_entries"] = nb_entries
     dict_metadata["nb_columns"] = nb_columns
+
+    if df.duplicated().any():
+        dict_metadata["duplicates_distribution"] = df.duplicated().sum() / nb_entries
+
+    return dict_metadata
+
+
+def _get_profile_datatype(dtype: str, col_series: pd.Series) -> str | None:
+    temp_type = str(dtype)
+
+    # Checking if this data type is referenced in type_map
+    if temp_type not in type_map:
+        # Add a log rather than printing on console only
+        e = f"{temp_type} is not referenced in type_map"
+        print(e)
+        return None
+
+    # Y/N columns and 0/1 columns are remapped to bool.
+    # Using issubset as some data actually have only one value that seems trivial to be marked as True or False.
+    if set(col_series.unique()).issubset({"Y", "N"}) or set(col_series.unique()).issubset({0, 1}):
+        temp_type = "bool"
+
+    return type_map[temp_type]
+
+
+def _get_column_unique_values(pd_series: pd.Series) -> list[Any]:
+    # Return unique values of a dataframe column / pandas series.
+    return list(pd_series.unique())
+
+
+def _get_profile_cardinality_distribution(pd_series: pd.Series) -> dict[Any, float] | None:
+    # Getting unique values of the column
+    unique_values = _get_column_unique_values(pd_series)
+
+    # Filtering out columns that do not seem to be categorical with an absolute threshold. Might be refined later.
+    if len(unique_values) <= MAX_CARDINALITY_NB:
+        dict_categories: dict[Any, float] = {}
+
+        # looping through the value_counts method, listing each category and the absolute number of times they
+        # appear in the table
+        for i, value in pd_series.value_counts(normalize=True).items():
+            dict_categories[i] = value  # Storing the relative value
+
+        return dict_categories
+
+    return None
+
+
+def _is_primary_key(pd_series: pd.Series, total_entries: int) -> bool:
+    # If all values are unique, the column might be a potential primary key
+    # Getting unique values of the column
+    unique_values = _get_column_unique_values(pd_series)
+
+    return len(unique_values) == total_entries
+
+
+def _is_null_allowed(pd_series: pd.Series) -> bool:
+    if pd_series.isna().any():
+        return True
+    else:
+        return False
+
+
+def _get_distribution_for_numerical_fields(col_name, df: pd.DataFrame) -> dict[Any, Any] | None:
+    if col_name in df.columns:
+        return df[col_name].to_dict()
+
+    return None
+
+
+def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) -> dict[str, Any]:
+
+    # Getting the actual table to gather data
+    df = pd.read_sql(f"SELECT * FROM {table_name}", co)
+
+    # df.describe() returns distribution data already that we will save as well
+    df_dist = df.describe()
+
+    # Data profiling for the table. Number of entries, columns
+    dict_metadata = _get_general_data(df=df)
+
+    # Next step is to get data profiling for each column. Stored in the key columns_details
     dict_metadata["columns_details"] = {}
 
-    # First step: getting the column names and types
     for col_name, dtype in df.dtypes.items():
-        dict_column = {}
-
-        # Data dependent on the column type
-        temp_type = str(dtype)
-
-        # Checking if this data type is referenced in type_map
-        if temp_type not in type_map:
-            # Add a log rather than printing on console only
-            e = f"{temp_type} is not referenced in type_map"
-            print(e)
-            continue
-
-        # Y/N columns and 0/1 columns are remapped to bool.
-        # Using issubset as some data actually have only one value that seems trivial to be marked as True or False.
-        if set(df[col_name].unique()).issubset({"Y", "N"}) or set(df[col_name].unique()).issubset({0, 1}):
-            temp_type = "bool"
-
-        # Adding Datatype to the column metadata
-        dict_column["datatype"] = type_map[temp_type]
-
-        # Checking unique values
-        unique_values = list(df[col_name].unique())
-
-        if len(unique_values) <= MAX_CARDINALITY_NB:
-            dict_categories = {}
-
-            # looping through the value_counts method, listing each category and the absolute number of times they
-            # appear in the table
-            for i, value in df[col_name].value_counts(normalize=True).items():
-                dict_categories[i] = value # Storing the relative value
-
-            dict_column["cardinality_distribution"] = dict_categories
-
-        # Checking if all values are unique, which might be a potential primary key
-        if len(unique_values) == nb_entries:  # and type of data is different from a datetime format
-            dict_column["potential_primary_key"] = True
-
-        # Checking if there are duplicates
-        if df[col_name].duplicated().any():
-            dict_column["duplicates_distribution"] = df.duplicated().sum() / nb_entries
-
-        # Add a check for Nulls
-        if df[col_name].isna().any():
-            dict_column["null_values"] = True
-        else:
-            dict_column["null_values"] = False
-
-        # Now checking the distribution if the field is numerical
-        if type_map[temp_type] in ["float", "int"]:
-            numerical_cols.append(col_name)
-            dict_column["values_distribution"] = df_dist[col_name].to_dict()
+        # Columns' metadata are stored in a dictionary and then aggregated to the table's metadata dictionary
+        dict_column: dict[str, Any] = {"datatype": _get_profile_datatype(dtype, df[col_name]),
+                                       "cardinality_distribution": _get_profile_cardinality_distribution(df[col_name]),
+                                       "potential_primary_key": _is_primary_key(df[col_name], total_entries=len(df)),
+                                       "null_values": _is_null_allowed(df[col_name]),
+                                       "values_distribution": _get_distribution_for_numerical_fields(col_name, df_dist)}
 
         # Adding column's metadata to the table metadata
         dict_metadata["columns_details"][col_name] = dict_column
 
     # Ending with adding correlations between numerical columns
     dict_metadata["correlations"] = _get_correlation_dict(df=df)
-
-
+    
     return dict_metadata
 
 
-def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME):
+def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, Any]:
     # This function loops through all tables and views available in the dataset passed as argument.
     # For each table, we save the metadata as a dictionary, and aggregate them in a list of dictionaries.
     # Once all the data is collected, it is written as a json file.
@@ -132,7 +158,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME):
     # Getting the scope of tables / views
     df = pd.read_sql("SELECT * FROM sqlite_master", conn)
 
-    dict_metadata = {}
+    dict_metadata: dict[str, Any] = {}
 
     for n, t in zip(df["name"], df["type"]):
         dict_table_metadata = _get_metadata_profiling_from_table(table_name=n, co=conn)
@@ -160,10 +186,11 @@ def dataset_calibration():
     # Saving the data as a json file
     _save_metadata(dict_data=dict_metadata, dataset_name=DB_NAME)
 
-    return None
+    return dict_metadata
+
 
 if __name__ == "__main__":
-    # dataset_calibration()
+    d_metadata = dataset_calibration()
 
     table_name = "application_record"
     kaggle_dataset: str = KAGGLE_DATASET_NAME
