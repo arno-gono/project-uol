@@ -1,10 +1,10 @@
 import sqlite3
-from config import DB_DIR, DB_NAME
+from config import DB_DIR, get_db_name
 
 
 def connecting_to_sqlite(kaggle_dataset: str):
-    # all db files are stored within a specific folder
-    path_db_file = DB_DIR / f"{DB_NAME}.db"
+    # all db files are stored within a specific folder, each one named after the dataset it holds
+    path_db_file = DB_DIR / f"{get_db_name(kaggle_dataset)}.db"
 
     # sqlite connector
     conn = sqlite3.connect(path_db_file)

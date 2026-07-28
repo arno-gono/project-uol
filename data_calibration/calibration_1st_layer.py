@@ -2,7 +2,7 @@ import json
 import os
 from typing import Any
 
-from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB
+from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB, MIN_DATETIME_PARSE_RATIO
 from data.sqlite_connector import connecting_to_sqlite
 import pandas as pd
 import numpy as np
@@ -15,6 +15,8 @@ type_map = {
     "float64": "float",
     "str": "str",
     "bool": "bool",
+    "datetime64[ns]": "datetime",
+    "datetime": "datetime",
 }
 
 
@@ -54,6 +56,22 @@ def _get_general_data(df: pd.DataFrame) -> dict[str, Any]:
     return dict_metadata
 
 
+def _is_datetime_column(pd_series: pd.Series) -> bool:
+    # Some timestamps are stored as plain strings. Trying to cast the column as datetime
+    non_null_values = pd_series.dropna()
+
+    # errors="coerce" turns strings that cannot be read as a date into NaT instead of raising allowing tolerance
+    # for errors.
+    # format="mixed" reads each value on its own, keeping day-first dates dd/mm/yyyy
+    # from being dropped because the first value looked month-first
+    parsed_values = pd.to_datetime(non_null_values, errors="coerce", format="mixed")
+
+    # Requiring a date separator to filter out plain numbers that can be read as dates
+    has_separator = non_null_values.str.contains(r"[-/:]", regex=True)
+
+    return bool((parsed_values.notna() & has_separator).mean() >= MIN_DATETIME_PARSE_RATIO)
+
+
 def _get_profile_datatype(dtype: str, col_series: pd.Series) -> str | None:
     temp_type = str(dtype)
 
@@ -68,6 +86,10 @@ def _get_profile_datatype(dtype: str, col_series: pd.Series) -> str | None:
     # Using issubset as some data actually have only one value that seems trivial to be marked as True or False.
     if set(col_series.unique()).issubset({"Y", "N"}) or set(col_series.unique()).issubset({0, 1}):
         temp_type = "bool"
+
+    # Some timestamps are stored as strings. Trying to cast as a datetime object
+    if temp_type == "str" and _is_datetime_column(col_series):
+        temp_type = "datetime"
 
     return type_map[temp_type]
 
@@ -144,7 +166,7 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
 
     # Ending with adding correlations between numerical columns
     dict_metadata["correlations"] = _get_correlation_dict(df=df)
-    
+
     return dict_metadata
 
 
@@ -189,9 +211,9 @@ def dataset_calibration():
     return dict_metadata
 
 
-if __name__ == "__main__":
-    d_metadata = dataset_calibration()
+# if __name__ == "__main__":
+    # d_metadata = dataset_calibration()
 
-    table_name = "application_record"
-    kaggle_dataset: str = KAGGLE_DATASET_NAME
-    co = connecting_to_sqlite(kaggle_dataset)
+    # table_name = ""
+    # kaggle_dataset: str = KAGGLE_DATASET_NAME
+    # co = connecting_to_sqlite(kaggle_dataset)
