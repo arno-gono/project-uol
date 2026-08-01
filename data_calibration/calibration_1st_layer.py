@@ -144,8 +144,9 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
     # Getting the actual table to gather data
     df = pd.read_sql(f"SELECT * FROM {table_name}", co)
 
-    # df.describe() returns distribution data already that we will save as well
-    df_dist = df.describe()
+    # df.describe() returns distribution data already that will be saved.
+    # Adding a couple percentiles to data profiling
+    df_dist = df.describe(percentiles=[0.01, 0.25, 0.5, 0.75, 0.99])
 
     # Data profiling for the table. Number of entries, columns
     dict_metadata = _get_general_data(df=df)
@@ -211,8 +212,8 @@ def dataset_calibration():
     return dict_metadata
 
 
-# if __name__ == "__main__":
-    # d_metadata = dataset_calibration()
+if __name__ == "__main__":
+    d_metadata = dataset_calibration()
 
     # table_name = ""
     # kaggle_dataset: str = KAGGLE_DATASET_NAME
