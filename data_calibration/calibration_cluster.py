@@ -10,10 +10,10 @@ from sklearn.preprocessing import StandardScaler
 NB_SAMPLES = 10_000
 
 
-def get_kmeans_profile(df: pd.DataFrame):
+def _get_kmeans_profile(df: pd.DataFrame):
 
     # Storing the best score obtained and which K in memory
-    best_score = 0
+    best_score = -1
     best_k = 0
 
     # Output of the best model
@@ -31,8 +31,10 @@ def get_kmeans_profile(df: pd.DataFrame):
     ]
 
     # Iterating over 10k rows at the moment in order to iterate fast
-    df_scaled = df[cols].sample(NB_SAMPLES)
+    df_scaled = df[cols].sample(min(NB_SAMPLES, len(df)), random_state=42)
     scaled = scaler.fit_transform(df_scaled)
+
+    scores_per_k = {}
 
     for k in range(2, 10):
         # Instantiating the model
@@ -42,12 +44,14 @@ def get_kmeans_profile(df: pd.DataFrame):
         # Scoring the model: -1 to 1, higher is better
         score = silhouette_score(scaled, labels)
 
+        # Saving scores per k:
+        scores_per_k[f"K_{k}"] = round(float(score), 4)
+
         # Saving this model if it performs better than the one selected so far.
         if score > best_score:
             best_score = score
             best_k = k
             best_kmeans = kmeans
-        print(f"k={k}  silhouette={score:.2f}")
 
     # Transforming centroids values back to original scales
     centroids = scaler.inverse_transform(best_kmeans.cluster_centers_)
@@ -65,10 +69,12 @@ def get_kmeans_profile(df: pd.DataFrame):
 
     return {"best_score": best_score,
             "best_k": best_k,
-            "clusters": clusters}
+            "clusters": clusters,
+            "scores_per_k": scores_per_k,
+            }
 
 
-def get_disguised_missing_values(df: pd.DataFrame):
+def _get_disguised_missing_values(df: pd.DataFrame):
 
     # Highlighting disguised missing values ie numerical placeholders that act as NULL.
     # Using Tukey's Fence method, a statistical approach to isolate outliers, but with more conservative parameters
@@ -119,14 +125,13 @@ def get_disguised_missing_values(df: pd.DataFrame):
             else:
                 gap_to_fence = (lower_fence - top_value) / iqr
 
-            print(f"Spotted a disguised missing value: {col} | value {top_value} | frequency: {frequency}")
             suspects[col] = {"value": float(top_value),
                              "frequency": float(frequency),
                              "gap_to_fence_iqr": round(float(gap_to_fence), 2)}
     return suspects
 
 
-def get_pca_profile(df: pd.DataFrame):
+def _get_pca_profile(df: pd.DataFrame):
     # Dimensionality reduction using Principal Component Analysis (PCA).
     # PCA identifies the axes (principal components) that account for the largest amount of variance
     # in the dataset.
@@ -161,7 +166,7 @@ def get_pca_profile(df: pd.DataFrame):
     # Finding the minimum number of components to retain 95% of the variance, ie up to the first component above
     # 95% in the cumulative array, as per Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow.
     param_variance_threshold = 0.95
-    n_dimensions = np.argmax(cumsum >= param_variance_threshold) + 1
+    n_dimensions = int(np.argmax(cumsum >= param_variance_threshold) + 1)
 
     # Output: variance explained per component and the suggested number to keep.
     components = []
@@ -181,9 +186,33 @@ def get_pca_profile(df: pd.DataFrame):
     }
 
 
+def get_ml_profile(df: pd.DataFrame):
+
+    # Disguised missing values are placeholders that can distort data, creating artificial outliers
+    disguised_missing = _get_disguised_missing_values(df)
+
+    df_clean = df.copy()
+    for col, v in disguised_missing.items():
+        df_clean = df_clean[df_clean[col] != v["value"]]
+
+    # Reducing the dimensionality of the dataset to its main drivers
+    pca_profile = _get_pca_profile(df_clean)
+
+    # Getting a KMeans profile i.e. mapping clusters of data and complex relationships in the dataset
+    kmeans_profile = _get_kmeans_profile(df_clean)
+
+    return {
+        "nb_entries_profiled": len(df_clean),
+        "nb_entries_dropped": len(df) - len(df_clean),
+        "disguised_missing_values": disguised_missing,
+        "pca": pca_profile,
+        "kmeans": kmeans_profile,
+    }
+
+
+
 if __name__ == "__main__":
     co = connecting_to_sqlite(KAGGLE_DATASET_NAME)
     df = pd.read_sql("SELECT * FROM application_record", co)
 
-    # missing = get_disguised_missing_values(df)
-    d_reduction = get_pca_profile(df)
+    q = get_ml_profile(df=df)

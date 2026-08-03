@@ -1,12 +1,12 @@
 import json
 import os
 from typing import Any
-
 from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB, MIN_DATETIME_PARSE_RATIO
 from data.sqlite_connector import connecting_to_sqlite
 import pandas as pd
 import numpy as np
 import sqlite3
+from data_calibration.calibration_cluster import get_ml_profile
 
 
 # remapping numpy / pandas datatypes to Python built-ins
@@ -146,7 +146,7 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
 
     # df.describe() returns distribution data already that will be saved.
     # Adding a couple percentiles to data profiling
-    df_dist = df.describe(percentiles=[0.01, 0.25, 0.5, 0.75, 0.99])
+    df_dist = df.describe(percentiles=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
 
     # Data profiling for the table. Number of entries, columns
     dict_metadata = _get_general_data(df=df)
@@ -167,6 +167,9 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
 
     # Ending with adding correlations between numerical columns
     dict_metadata["correlations"] = _get_correlation_dict(df=df)
+
+    # Machine Learning approach: Dimensionality reduction and KMeans
+    dict_metadata["ml_approach"] = get_ml_profile(df=df)
 
     return dict_metadata
 
