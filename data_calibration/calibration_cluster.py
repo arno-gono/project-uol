@@ -22,16 +22,8 @@ def _get_kmeans_profile(df: pd.DataFrame):
     # The numerical data needs to be scaled, otherwise high values gets weighted higher by the model
     scaler = StandardScaler()
 
-    # Testing with numerical columns first
-    cols = [
-        "AMT_INCOME_TOTAL",
-        "DAYS_BIRTH",
-        "DAYS_EMPLOYED",
-        "CNT_FAM_MEMBERS"
-    ]
-
     # Iterating over 10k rows at the moment in order to iterate fast
-    df_scaled = df[cols].sample(min(NB_SAMPLES, len(df)), random_state=42)
+    df_scaled = df.sample(min(NB_SAMPLES, len(df)), random_state=42)
     scaled = scaler.fit_transform(df_scaled)
 
     scores_per_k = {}
@@ -86,17 +78,9 @@ def _get_disguised_missing_values(df: pd.DataFrame):
     param_frequency = 0.01
     param_tukeys_fence_iqr_multiplier = 10
 
-    # Needs to be changed to numerical columns only
-    cols = [
-        "AMT_INCOME_TOTAL",
-        "DAYS_BIRTH",
-        "DAYS_EMPLOYED",
-        "CNT_FAM_MEMBERS"
-    ]
-
     suspects = {}
 
-    for col in cols:
+    for col in df.columns:
 
         # The .mode() method returns the value with highest frequency in the column.
         top_value = df[col].mode()[0]
@@ -138,19 +122,9 @@ def _get_pca_profile(df: pd.DataFrame):
     # Reference: Géron, A. (2022). Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow.
     # 3rd Edition, Chapter 8: Dimensionality Reduction, O'Reilly Media.
 
-    cols = [
-        "ID",
-        "CNT_CHILDREN",
-        "AMT_INCOME_TOTAL",
-        "DAYS_BIRTH",
-        "DAYS_EMPLOYED",
-        "CNT_FAM_MEMBERS",
-        "FLAG_PHONE"
-    ]
-
     # Standardising data first.
     scaler = StandardScaler()
-    scaled = scaler.fit_transform(df[cols].dropna())
+    scaled = scaler.fit_transform(df.dropna())
 
     # Fitting PCA with all components to inspect how much variance each one explains.
     pca = PCA()
@@ -179,14 +153,17 @@ def _get_pca_profile(df: pd.DataFrame):
         })
 
     return {
-        "n_original_features": len(cols),
+        "n_original_features": len(df.columns),
         "param_variance_threshold": param_variance_threshold,
         "nb_dimensions": n_dimensions,
         "components": components
     }
 
 
-def get_ml_profile(df: pd.DataFrame):
+def get_ml_profile(df: pd.DataFrame, numerical_columns: list):
+
+    # Trimming data with numerical columns only
+    df = df[numerical_columns]
 
     # Disguised missing values are placeholders that can distort data, creating artificial outliers
     disguised_missing = _get_disguised_missing_values(df)
@@ -199,6 +176,7 @@ def get_ml_profile(df: pd.DataFrame):
     pca_profile = _get_pca_profile(df_clean)
 
     # Getting a KMeans profile i.e. mapping clusters of data and complex relationships in the dataset
+    df_clean = df_clean.dropna()  # Removing nan values from the dataset which prevents KMeans from running
     kmeans_profile = _get_kmeans_profile(df_clean)
 
     return {
@@ -213,6 +191,6 @@ def get_ml_profile(df: pd.DataFrame):
 
 if __name__ == "__main__":
     co = connecting_to_sqlite(KAGGLE_DATASET_NAME)
-    df = pd.read_sql("SELECT * FROM application_record", co)
-
-    q = get_ml_profile(df=df)
+    df = pd.read_sql("SELECT * FROM olist_products_dataset", co)
+    numerical_columns = ['product_name_lenght', 'product_description_lenght', 'product_photos_qty', 'product_weight_g', 'product_length_cm', 'product_height_cm', 'product_width_cm']
+    # q = get_ml_profile(df=df)

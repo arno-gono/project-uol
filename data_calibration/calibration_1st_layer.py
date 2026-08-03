@@ -169,8 +169,16 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
     dict_metadata["correlations"] = _get_correlation_dict(df=df)
 
     # Machine Learning approach: Dimensionality reduction and KMeans
-    dict_metadata["ml_approach"] = get_ml_profile(df=df)
+    # Passing only numerical values and non-primary keys to the ML profile
+    num_columns = [c for c in dict_metadata["columns_details"]
+                   if dict_metadata["columns_details"][c]["datatype"] in ["int", "float"]
+                   and dict_metadata["columns_details"][c]["potential_primary_key"] is False]
 
+    print(f"{table_name} num_columns:", num_columns)
+    if len(num_columns) >= 2:
+        dict_metadata["ml_approach"] = get_ml_profile(df=df, numerical_columns=num_columns)
+    else:
+        dict_metadata["ml_approach"] = f"Not enough numerical columns to run ML profiling ({len(num_columns)} column)"
     return dict_metadata
 
 
