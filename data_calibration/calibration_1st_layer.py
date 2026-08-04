@@ -6,6 +6,7 @@ from data.sqlite_connector import connecting_to_sqlite
 import pandas as pd
 import numpy as np
 import sqlite3
+from scipy.stats import contingency
 from data_calibration.calibration_cluster import get_ml_profile
 
 
@@ -37,6 +38,91 @@ def _get_correlation_dict(df: pd.DataFrame) -> dict[str, float]:
             d_correl[f"{k1} | {k2}"] = round(v2, 4)
 
     return d_correl
+
+
+def _get_cramers_v(series_a: pd.Series, series_b: pd.Series) -> float:
+    # Cramer's V measures the association between two categorical columns.
+    # The output ranges from 0 (independent) to 1 (one column fully determines the other).
+    # Reference: Cramer, H. (1946). Mathematical Methods of Statistics.
+    # Princeton University Press, Section 21.4.
+    # Explanation and worked example: https://www.geeksforgeeks.org/data-analysis/calculate-cramer-s-coefficient-matrix-using-pandas/
+    df_contingency = pd.crosstab(series_a, series_b)
+
+    # A column left with a single category carries no association to measure.
+    if min(len(df_contingency.columns), len(df_contingency)) < 2:
+        return 0.0
+
+    # scipy's association() returns V directly.
+    # Documentation:
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.contingency.association.html
+    return float(contingency.association(df_contingency, method="cramer"))
+
+
+def _get_categorical_association_dict(df: pd.DataFrame, categorical_cols: list[str]) -> dict[str, float]:
+    d_association = {}
+
+    # Looping through each categorical column, calculating Cramer's V value and adding it to a dict
+    for i in range(len(categorical_cols)):
+        for j in range(len(categorical_cols)):
+            if i < j:
+                col_i = categorical_cols[i]
+                col_j = categorical_cols[j]
+                d_association[f"{col_i} | {col_j}"] = round(_get_cramers_v(df[col_i], df[col_j]), 4)
+
+    return d_association
+
+
+def _get_correlation_ratio(categorical_series: pd.Series, numerical_series: pd.Series) -> float:
+    # The correlation ratio measures the association between a categorical column and a numerical one.
+    # It ranges from 0 to 1 (low to high association).
+    # Reference: Pearson, K. (1905). On the General Theory of Skew Correlation and Non-linear
+    # Regression. Drapers' Company Research Memoirs, Biometric Series II.
+    # Formula: https://en.wikipedia.org/wiki/Correlation_ratio
+    # Programming implementation: https://github.com/shakedzy/dython/blob/master/dython/nominal.py
+
+    df_pairs = pd.DataFrame({"category": categorical_series, "value": numerical_series}).dropna()
+
+    if df_pairs.empty:
+        return 0.0
+
+    measurements = df_pairs["value"].to_numpy()
+
+    # factorize() puts a number on categories.
+    fcat, _ = pd.factorize(df_pairs["category"])
+    cat_num = fcat.max() + 1
+
+    n_array = np.zeros(cat_num)
+    y_avg_array = np.zeros(cat_num)
+    for i in range(cat_num):
+        cat_measures = measurements[np.argwhere(fcat == i).flatten()]
+        n_array[i] = len(cat_measures)
+        y_avg_array[i] = np.average(cat_measures)
+
+    y_total_avg = np.sum(n_array * y_avg_array) / np.sum(n_array)
+    numerator = np.sum(n_array * (y_avg_array - y_total_avg) ** 2)
+    denominator = np.sum((measurements - y_total_avg) ** 2)
+
+    if numerator == 0:
+        return 0.0
+
+    return float(np.sqrt(numerator / denominator))
+
+
+def _get_mixed_association_dict(df: pd.DataFrame, categorical_cols: list[str],
+                                numerical_cols: list[str]) -> dict[str, float]:
+    d_association = {}
+
+    # Looping through categorical and numerical columns, calculating the correlation ratio and keeping it in a dict
+    for col_categorical in categorical_cols:
+        for col_numerical in numerical_cols:
+            # Some categorical columns are also numerical columns. Skipping this case
+            if col_categorical == col_numerical:
+                continue
+
+            d_association[f"{col_categorical} | {col_numerical}"] = round(
+                _get_correlation_ratio(df[col_categorical], df[col_numerical]), 4)
+
+    return d_association
 
 
 def _get_general_data(df: pd.DataFrame) -> dict[str, Any]:
@@ -165,20 +251,35 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
         # Adding column's metadata to the table metadata
         dict_metadata["columns_details"][col_name] = dict_column
 
-    # Ending with adding correlations between numerical columns
+    # Ending with correlations between columns: simple correlations, categorical associations using Cramer's V method
+    # and another one.
     dict_metadata["correlations"] = _get_correlation_dict(df=df)
 
-    # Machine Learning approach: Dimensionality reduction and KMeans
-    # Passing only numerical values and non-primary keys to the ML profile
-    num_columns = [c for c in dict_metadata["columns_details"]
-                   if dict_metadata["columns_details"][c]["datatype"] in ["int", "float"]
-                   and dict_metadata["columns_details"][c]["potential_primary_key"] is False]
+    # Most analysis on relationship is run on numerical columns.
+    # Cramer's V model calculates association between categorical columns.
+    categorical_columns = [col for col, details in dict_metadata["columns_details"].items()
+                           if details["cardinality_distribution"] is not None
+                           and not details["potential_primary_key"]]
 
-    print(f"{table_name} num_columns:", num_columns)
-    if len(num_columns) >= 2:
-        dict_metadata["ml_approach"] = get_ml_profile(df=df, numerical_columns=num_columns)
+    dict_metadata["cramers_v_categorical_associations"] = _get_categorical_association_dict(
+        df=df, categorical_cols=categorical_columns)
+
+    # Passing only numerical values and non-primary keys
+    numerical_columns = [c for c in dict_metadata["columns_details"]
+                         if dict_metadata["columns_details"][c]["datatype"] in ["int", "float"]
+                         and dict_metadata["columns_details"][c]["potential_primary_key"] is False]
+
+    # Last pairing: the correlation ratio associates a categorical column with a numerical one.
+    # Run on the raw column as a placeholder tied to a single category, ie a disguised missing value,
+    # shows up here as a ratio close to 1 and tells the agent which category the placeholder stands for.
+    dict_metadata["categorical_numerical_associations"] = _get_mixed_association_dict(
+        df=df, categorical_cols=categorical_columns, numerical_cols=numerical_columns)
+
+    # Machine Learning approach: Dimensionality reduction, Disguised Missing Values and KMeans clusters
+    if len(numerical_columns) >= 2:
+        dict_metadata["ml_calibration"] = get_ml_profile(df=df, numerical_columns=numerical_columns)
     else:
-        dict_metadata["ml_approach"] = f"Not enough numerical columns to run ML profiling ({len(num_columns)} column)"
+        dict_metadata["ml_calibration"] = f"Not enough numerical columns to run ML profiling ({len(numerical_columns)} column)"
     return dict_metadata
 
 
@@ -226,6 +327,7 @@ def dataset_calibration():
 if __name__ == "__main__":
     d_metadata = dataset_calibration()
 
-    # table_name = ""
+    # table_name = "olist_products_dataset"
+    # table_name = "application_record"
     # kaggle_dataset: str = KAGGLE_DATASET_NAME
     # co = connecting_to_sqlite(kaggle_dataset)

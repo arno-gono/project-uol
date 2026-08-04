@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-KAGGLE_DATASET_NAME = "olistbr/brazilian-ecommerce"
+KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
 # other dataset to try:
 # olistbr/brazilian-ecommerce
 # shrinivasv/retail-store-star-schema-dataset
@@ -26,7 +26,7 @@ DB_NAME = get_db_name(KAGGLE_DATASET_NAME)
 # Maximum number of unique values for a field to be considered as a categorical field.
 # Expressed as an absolute number, ie if the number of unique values is less than MAX_CARDINALITY_NB,
 # it is considered as a categorical field. Left as a parameter for now to readjust for new datasets.
-MAX_CARDINALITY_NB = 50
+MAX_CARDINALITY_NB = 100
 
 # Minimum share of the non-null values of a string column that must parse as dates for the column to be
 # flagged as a datetime one. Left below 1 so that a few dirty values do not disqualify a genuine date column.
