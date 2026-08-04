@@ -28,7 +28,10 @@ def _get_kmeans_profile(df: pd.DataFrame):
 
     scores_per_k = {}
 
-    for k in range(2, 10):
+    # Looping k parameter as the number of clusters is variable. Minimum 20 runs, and the loop stops
+    # when the best score was achieved at least 5 runs before and the model performs worse and worse
+    k = 2
+    while k < best_k + 5 or k <= 20:
         # Instantiating the model
         kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = kmeans.fit_predict(scaled)
@@ -44,6 +47,8 @@ def _get_kmeans_profile(df: pd.DataFrame):
             best_score = score
             best_k = k
             best_kmeans = kmeans
+
+        k += 1
 
     # Transforming centroids values back to original scales
     centroids = scaler.inverse_transform(best_kmeans.cluster_centers_)
@@ -191,6 +196,6 @@ def get_ml_profile(df: pd.DataFrame, numerical_columns: list):
 
 if __name__ == "__main__":
     co = connecting_to_sqlite(KAGGLE_DATASET_NAME)
-    df = pd.read_sql("SELECT * FROM olist_products_dataset", co)
+    df = pd.read_sql("SELECT * FROM application_record", co)
     numerical_columns = ['product_name_lenght', 'product_description_lenght', 'product_photos_qty', 'product_weight_g', 'product_length_cm', 'product_height_cm', 'product_width_cm']
     # q = get_ml_profile(df=df)
