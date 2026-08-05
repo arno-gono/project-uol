@@ -40,7 +40,8 @@ def _clean_database():
 
 def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
     # getting a connection to sqlite database (or creating one if it does not exist)
-    conn = connecting_to_sqlite(kaggle_dataset)
+    conn = connecting_to_sqlite(kaggle_dataset, is_clean=True)
+    conn_test = connecting_to_sqlite(kaggle_dataset, is_clean=False)
 
     # looping through the csv files from Kaggle and uploading to sqlite
     for file in os.listdir(path_kaggle_data):
@@ -59,17 +60,16 @@ def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
         if "df_clean" in split_set:
             # Uploading the clean data to SQLite
             split_set["df_clean"].to_sql(table_name, conn, if_exists="replace", index=False)
-
-            # Also saving the clean and test data as Dataframe in order not to pollute the SQL database
-            split_set["df_clean"].to_csv(f"{DB_DIR}/{table_name}_clean.csv", index=False)
-            split_set["df_test"].to_csv(f"{DB_DIR}/{table_name}_test.csv", index=False)
+            split_set["df_test"].to_sql(table_name, conn_test, if_exists="replace", index=False)
 
         else:
             # Uploading the raw data to SQLite
             df.to_sql(table_name, conn, if_exists="replace", index=False)
 
+
     # closing connection
     conn.close()
+    conn_test.close()
 
     return None
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # check existing tables
     print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
 
-    _create_sqlite_view(KAGGLE_DATASET_NAME)
+    # _create_sqlite_view(KAGGLE_DATASET_NAME)
 
     # open a table / view as df
     # table_name = "v_test_table"

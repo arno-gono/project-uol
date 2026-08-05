@@ -300,7 +300,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
     # Getting the scope of tables / views
     df = pd.read_sql("SELECT * FROM sqlite_master", conn)
 
-    dict_metadata: dict[str, Any] = {}
+    dict_metadata = {}
 
     for n, t in zip(df["name"], df["type"]):
         print(f"Starting calibration for {n}")

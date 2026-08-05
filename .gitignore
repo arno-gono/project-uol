@@ -223,3 +223,4 @@ __marimo__/
 data/.DS_Store
 .DS_Store
 /db_files
+/db_agent
