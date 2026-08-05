@@ -1,4 +1,4 @@
-from config import KAGGLE_DATASET_NAME, MAX_CARDINALITY_NB
+from config import KAGGLE_DATASET_NAME
 from data.sqlite_connector import connecting_to_sqlite
 import numpy as np
 import pandas as pd
@@ -147,20 +147,53 @@ def _get_pca_profile(df: pd.DataFrame):
     param_variance_threshold = 0.95
     n_dimensions = int(np.argmax(cumsum >= param_variance_threshold) + 1)
 
-    # Output: variance explained per component and the suggested number to keep.
+    # Saving components in the profiling, as it is the information the agent will need to see in order
+    # to understand PCA readings (column names).
+    # Programming example:
+    # https://scentellegher.github.io/machine-learning/2020/01/27/pca-loadings-sklearn.html
+    loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
+    loading_matrix = pd.DataFrame(loadings, index=df.columns,
+                                  columns=[f"PC{i + 1}" for i in range(len(explained))])
+
+    # Columns correlating less than param_loading_threshold with a component are left out as they
+    # only add noise. Loadings between 0.30 and 0.40 are the minimum level for a column to be worth
+    # interpreting on a component, 0.50 and above being strong.
+    # Reference: Hair, J.F., Black, W.C., Babin, B.J. & Anderson, R.E. (2010).
+    # Multivariate Data Analysis. 7th Edition, Pearson, Chapter 3.
+    param_loading_threshold = 0.3
+
+    # Output: variance explained per component, the columns driving it and the number to keep.
     components = []
+    main_columns = []
+
     for i, (var, cum) in enumerate(zip(explained, cumsum)):
-        components.append({
+        dimension_kept = True if i + 1 <= n_dimensions else False
+
+        dict_component = {
             "component": i + 1,
             "variance_explained": round(float(var), 4),
             "cumulative_variance": round(float(cum), 4),
-            "dimension_kept": True if i + 1 <= n_dimensions else False,
-        })
+            "dimension_kept": dimension_kept,
+        }
+
+        # Columns' names and weights are listed for the components that are kept
+        if dimension_kept:
+            component_loadings = loading_matrix[f"PC{i + 1}"]
+            dict_component["main_columns"] = {col: round(float(value), 4) for col, value in component_loadings.items()
+                                              if abs(float(value)) >= param_loading_threshold}
+
+            # Adding the driving columns to a list
+            main_columns += [c for c in list(dict_component["main_columns"].keys()) if c not in main_columns]
+
+            components.append(dict_component)
+
 
     return {
         "n_original_features": len(df.columns),
         "param_variance_threshold": param_variance_threshold,
+        "param_loading_threshold": param_loading_threshold,
         "nb_dimensions": n_dimensions,
+        "main_columns": main_columns,
         "components": components
     }
 
@@ -196,6 +229,7 @@ def get_ml_profile(df: pd.DataFrame, numerical_columns: list):
 
 if __name__ == "__main__":
     co = connecting_to_sqlite(KAGGLE_DATASET_NAME)
-    df = pd.read_sql("SELECT * FROM application_record", co)
+    df = pd.read_sql("SELECT * FROM olist_products_dataset", co)
     numerical_columns = ['product_name_lenght', 'product_description_lenght', 'product_photos_qty', 'product_weight_g', 'product_length_cm', 'product_height_cm', 'product_width_cm']
+    df = df[numerical_columns]
     # q = get_ml_profile(df=df)

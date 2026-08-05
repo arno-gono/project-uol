@@ -17,6 +17,7 @@ type_map = {
     "str": "str",
     "bool": "bool",
     "datetime64[ns]": "datetime",
+    "datetime64[us]": "datetime",
     "datetime": "datetime",
 }
 
@@ -127,7 +128,7 @@ def _get_mixed_association_dict(df: pd.DataFrame, categorical_cols: list[str],
 
 def _get_general_data(df: pd.DataFrame) -> dict[str, Any]:
     # Main dict of metadata, containing nested dictionaries.
-    dict_metadata: dict[str, Any] = {}
+    dict_metadata = {}
 
     # Main data
     nb_entries = len(df)
@@ -203,12 +204,12 @@ def _get_profile_cardinality_distribution(pd_series: pd.Series) -> dict[Any, flo
     return None
 
 
-def _is_primary_key(pd_series: pd.Series, total_entries: int) -> bool:
+def _is_primary_key(pd_series: pd.Series) -> bool:
     # If all values are unique, the column might be a potential primary key
     # Getting unique values of the column
     unique_values = _get_column_unique_values(pd_series)
 
-    return len(unique_values) == total_entries
+    return len(unique_values) == len(pd_series)
 
 
 def _is_null_allowed(pd_series: pd.Series) -> bool:
@@ -220,7 +221,7 @@ def _is_null_allowed(pd_series: pd.Series) -> bool:
 
 def _get_distribution_for_numerical_fields(col_name, df: pd.DataFrame) -> dict[Any, Any] | None:
     if col_name in df.columns:
-        return df[col_name].to_dict()
+        return df[col_name].dropna().to_dict()
 
     return None
 
@@ -231,8 +232,14 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
     df = pd.read_sql(f"SELECT * FROM {table_name}", co)
 
     # df.describe() returns distribution data already that will be saved.
+    # Some timestamps are stored as strings. Casting them before profiling
+    # so describe() shows a min, max and percentiles
+    for col_name in df.columns:
+        if str(df[col_name].dtype) == "str" and _is_datetime_column(df[col_name]):
+            df[col_name] = pd.to_datetime(df[col_name], errors="coerce", format="mixed")
+
     # Adding a couple percentiles to data profiling
-    df_dist = df.describe(percentiles=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
+    df_dist = df.describe(percentiles=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], include="all")
 
     # Data profiling for the table. Number of entries, columns
     dict_metadata = _get_general_data(df=df)
@@ -244,7 +251,7 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
         # Columns' metadata are stored in a dictionary and then aggregated to the table's metadata dictionary
         dict_column: dict[str, Any] = {"datatype": _get_profile_datatype(dtype, df[col_name]),
                                        "cardinality_distribution": _get_profile_cardinality_distribution(df[col_name]),
-                                       "potential_primary_key": _is_primary_key(df[col_name], total_entries=len(df)),
+                                       "potential_primary_key": _is_primary_key(df[col_name]),
                                        "null_values": _is_null_allowed(df[col_name]),
                                        "values_distribution": _get_distribution_for_numerical_fields(col_name, df_dist)}
 
@@ -328,7 +335,7 @@ def dataset_calibration():
 if __name__ == "__main__":
     d_metadata = dataset_calibration()
 
-    # table_name = "olist_products_dataset"
     # table_name = "application_record"
+    # table_name = "olist_orders_dataset"
     # kaggle_dataset: str = KAGGLE_DATASET_NAME
     # co = connecting_to_sqlite(kaggle_dataset)
