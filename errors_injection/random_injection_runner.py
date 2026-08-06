@@ -2,8 +2,8 @@ import random
 import pandas as pd
 import os
 from data.sqlite_connector import connecting_to_sqlite
-from config import KAGGLE_DATASET_NAME, DB_NAME, DB_DIR_AGENT
-from data.utils import get_calibration_file_path, get_calibration_file_as_dict
+from config import KAGGLE_DATASET_NAME, DB_DIR_AGENT
+from data.utils import get_calibration_file_path
 import shutil
 from errors_injection.errors_injections_models import inject_wrong_datatype
 
@@ -34,7 +34,7 @@ def _copy_calibration_files() -> None:
 
 
 def _get_all_tables_from_database(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> list[str]:
-    conn = connecting_to_sqlite(kaggle_dataset, is_clean=True)
+    conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
 
     # Getting the scope of tables / views
     df = pd.read_sql("SELECT * FROM sqlite_master", conn)
@@ -75,9 +75,11 @@ def save_corrupted_data_for_agent(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> 
     # Randomly choose how many tables will have errors injected
     tables_with_errors = _pick_tables_to_inject_errors_in(all_tables)
 
+    conn_clean = connecting_to_sqlite(kaggle_dataset, database_type="clean")
+    conn_test = connecting_to_sqlite(kaggle_dataset, database_type="test")
+    conn_agent = connecting_to_sqlite(kaggle_dataset, database_type="agent")
+
     for table in all_tables:
-        conn_clean = connecting_to_sqlite(kaggle_dataset, is_clean=True)
-        conn_test = connecting_to_sqlite(kaggle_dataset, is_clean=False)
 
         df_clean = pd.read_sql(f"SELECT * FROM {table}", conn_clean)
         df_test = pd.read_sql(f"SELECT * FROM {table}", conn_test)
@@ -91,10 +93,17 @@ def save_corrupted_data_for_agent(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> 
 
         # Add the error data to the _clean dataset and save for the agent
         df_final = pd.concat([df_clean, df_test])
-        df_final.to_csv(f"{DB_DIR_AGENT}/{DB_NAME}_{table}.csv", index=False)
+
+        # The final df will have to be saved as a SQL database for views to be created
+        # df_final.to_csv(f"{DB_DIR_AGENT}/{DB_NAME}_{table}.csv", index=False)
+        df_final.to_sql(table, conn_agent, if_exists="replace", index=False)
 
     # The JSON for the calibration also needs to be available to the agent.
     _copy_calibration_files()
+
+    conn_clean.close()
+    conn_test.close()
+    conn_agent.close()
 
     return
 

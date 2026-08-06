@@ -295,7 +295,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
     # For each table, we save the metadata as a dictionary, and aggregate them in a list of dictionaries.
     # Once all the data is collected, it is written as a json file.
 
-    conn = connecting_to_sqlite(kaggle_dataset)
+    conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
 
     # Getting the scope of tables / views
     df = pd.read_sql("SELECT * FROM sqlite_master", conn)
@@ -338,4 +338,4 @@ if __name__ == "__main__":
     # table_name = "application_record"
     # table_name = "olist_orders_dataset"
     # kaggle_dataset: str = KAGGLE_DATASET_NAME
-    # co = connecting_to_sqlite(kaggle_dataset)
+    # co = connecting_to_sqlite(kaggle_dataset, database_type="clean")

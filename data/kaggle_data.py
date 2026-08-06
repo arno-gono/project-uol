@@ -5,7 +5,6 @@ from data.sqlite_connector import connecting_to_sqlite
 from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME
 
 
-
 def _download_data_from_kaggle(kaggle_dataset: str):
     # kaggle_dataset has the format "owner_data/dataset_name"
     path = kagglehub.dataset_download(kaggle_dataset)
@@ -40,8 +39,8 @@ def _clean_database():
 
 def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
     # getting a connection to sqlite database (or creating one if it does not exist)
-    conn = connecting_to_sqlite(kaggle_dataset, is_clean=True)
-    conn_test = connecting_to_sqlite(kaggle_dataset, is_clean=False)
+    conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
+    conn_test = connecting_to_sqlite(kaggle_dataset, database_type="test")
 
     # looping through the csv files from Kaggle and uploading to sqlite
     for file in os.listdir(path_kaggle_data):
@@ -75,7 +74,7 @@ def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
 
 
 def _create_sqlite_view(kaggle_dataset: str):
-    conn = connecting_to_sqlite(kaggle_dataset)
+    conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
 
     # declare the view as a string
 
@@ -128,7 +127,7 @@ def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME):
 
 if __name__ == "__main__":
     # open a connection
-    conn = connecting_to_sqlite(KAGGLE_DATASET_NAME)
+    conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
     kaggle_dataset = KAGGLE_DATASET_NAME
     print("Hello")
 

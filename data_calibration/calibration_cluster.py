@@ -228,7 +228,7 @@ def get_ml_profile(df: pd.DataFrame, numerical_columns: list):
 
 
 if __name__ == "__main__":
-    co = connecting_to_sqlite(KAGGLE_DATASET_NAME)
+    co = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
     df = pd.read_sql("SELECT * FROM olist_products_dataset", co)
     numerical_columns = ['product_name_lenght', 'product_description_lenght', 'product_photos_qty', 'product_weight_g', 'product_length_cm', 'product_height_cm', 'product_width_cm']
     df = df[numerical_columns]
