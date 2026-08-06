@@ -11,6 +11,8 @@ KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
 # the path is the same no matter which directory the script is run from
 DB_DIR = Path(__file__).resolve().parent / "db_files"
 DB_DIR_AGENT = Path(__file__).resolve().parent / "db_agent"
+LOGS_DIR = Path(__file__).resolve().parent / "logs"
+INJECTION_LOG_DIR = LOGS_DIR / "injection_logs.json"
 
 
 def get_db_name(kaggle_dataset: str) -> str:

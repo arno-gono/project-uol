@@ -5,14 +5,15 @@ from data.sqlite_connector import connecting_to_sqlite
 from config import KAGGLE_DATASET_NAME, DB_DIR_AGENT
 from data.utils import get_calibration_file_path
 import shutil
-from errors_injection.errors_injections_models import inject_wrong_datatype
+from errors_injection.injection_logs import clean_injection_logs, append_injection_logs
+from errors_injection.errors_injections_models import (inject_wrong_datatype, inject_nulls, inject_duplicate_rows,
+                                                       inject_new_column)
 
 ERROR_TYPES_DICT = {
     "wrong_datatype": inject_wrong_datatype,
-    "insert_null": 1,
-    "duplicate_primary_key": 1,
-    "duplicate_rows": 1,
-    "referential_drift": 1,
+    "insert_null": inject_nulls,
+    "duplicate_rows": inject_duplicate_rows,
+    "insert_column": inject_new_column,
 }
 
 
@@ -65,8 +66,8 @@ def _pick_tables_to_inject_errors_in(list_tables: list[str]) -> list[str]:
     return tables_picked
 
 
-def save_corrupted_data_for_agent(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
-    # Clean the folder where the agent finds the data to analyse
+def save_corrupted_data_for_agent(round_number: int, kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
+    # Clean the folder where the agent finds the data to analyse and the injection log
     _clean_db_agent()
 
     # Get the scope of all the available tables
@@ -106,6 +107,26 @@ def save_corrupted_data_for_agent(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> 
     conn_agent.close()
 
     return
+
+
+def run_several_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
+    """
+        Function that runs several rounds of injection. Each round selects a random number of tables
+        which will have errors injected into.
+    """
+
+    # Cleaning the injection log file for a fresh start
+    clean_injection_logs(kaggle_dataset=kaggle_dataset)
+
+    # Looping nb_rounds times
+    nb_rounds = 10
+
+    for round_number in range(nb_rounds):
+        save_corrupted_data_for_agent(round_number, kaggle_dataset)
+
+    return None
+
+
 
 
 if __name__ == "__main__":
