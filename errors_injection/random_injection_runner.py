@@ -5,21 +5,16 @@ from data.sqlite_connector import connecting_to_sqlite
 from config import KAGGLE_DATASET_NAME, DB_DIR_AGENT
 from data.utils import get_calibration_file_path
 import shutil
-from errors_injection.injection_logs import clean_injection_logs, append_injection_logs
-from errors_injection.errors_injections_models import (inject_wrong_datatype, inject_nulls, inject_duplicate_rows,
-                                                       inject_new_column)
+from errors_injection.injection_logs import clean_injection_logs
+from errors_injection.errors_injections_models import ErrorInjectionsModels
 
-ERROR_TYPES_DICT = {
-    "wrong_datatype": inject_wrong_datatype,
-    "insert_null": inject_nulls,
-    "duplicate_rows": inject_duplicate_rows,
-    "insert_column": inject_new_column,
-}
 
 
 def _clean_db_agent() -> None:
     for file in os.listdir(DB_DIR_AGENT):
-        os.remove(f"{DB_DIR_AGENT}/{file}")
+        # Cleaning only the db files which are newly generated each round. Leaving the JSON file (Calibration)
+        if "db" in file:
+            os.remove(f"{DB_DIR_AGENT}/{file}")
     return
 
 
@@ -66,7 +61,7 @@ def _pick_tables_to_inject_errors_in(list_tables: list[str]) -> list[str]:
     return tables_picked
 
 
-def save_corrupted_data_for_agent(round_number: int, kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
+def save_corrupted_data_for_agent(run_number: int, kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
     # Clean the folder where the agent finds the data to analyse and the injection log
     _clean_db_agent()
 
@@ -75,10 +70,14 @@ def save_corrupted_data_for_agent(round_number: int, kaggle_dataset: str = KAGGL
 
     # Randomly choose how many tables will have errors injected
     tables_with_errors = _pick_tables_to_inject_errors_in(all_tables)
+    print(f"Starting injecting errors in {tables_with_errors} tables")
 
     conn_clean = connecting_to_sqlite(kaggle_dataset, database_type="clean")
     conn_test = connecting_to_sqlite(kaggle_dataset, database_type="test")
     conn_agent = connecting_to_sqlite(kaggle_dataset, database_type="agent")
+
+    # class handling running the error functions
+    error_inject_runner = ErrorInjectionsModels()
 
     for table in all_tables:
 
@@ -86,21 +85,17 @@ def save_corrupted_data_for_agent(round_number: int, kaggle_dataset: str = KAGGL
         df_test = pd.read_sql(f"SELECT * FROM {table}", conn_test)
 
         if table in tables_with_errors:
-
-            # Randomly choose the type of errors that will be injected
-
-            # Inject errors in the _test database
-            df_test = df_test
+            print(f"\nStarting injecting errors in {table}")
+            # Inject errors in the _test df
+            df_test = error_inject_runner.run_errors(df_test=df_test, table_name=table, run_number=run_number)
 
         # Add the error data to the _clean dataset and save for the agent
         df_final = pd.concat([df_clean, df_test])
 
         # The final df will have to be saved as a SQL database for views to be created
-        # df_final.to_csv(f"{DB_DIR_AGENT}/{DB_NAME}_{table}.csv", index=False)
         df_final.to_sql(table, conn_agent, if_exists="replace", index=False)
 
-    # The JSON for the calibration also needs to be available to the agent.
-    _copy_calibration_files()
+        # Next Step is to actually call the agent to start its analysis
 
     conn_clean.close()
     conn_test.close()
@@ -109,7 +104,7 @@ def save_corrupted_data_for_agent(round_number: int, kaggle_dataset: str = KAGGL
     return
 
 
-def run_several_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
+def run_multiple_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
     """
         Function that runs several rounds of injection. Each round selects a random number of tables
         which will have errors injected into.
@@ -118,16 +113,22 @@ def run_several_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
     # Cleaning the injection log file for a fresh start
     clean_injection_logs(kaggle_dataset=kaggle_dataset)
 
-    # Looping nb_rounds times
-    nb_rounds = 10
+    # The JSON for the calibration also needs to be available to the agent.
+    _copy_calibration_files()
 
-    for round_number in range(nb_rounds):
-        save_corrupted_data_for_agent(round_number, kaggle_dataset)
+    # Looping nb_rounds times
+    nb_runs = 5
+
+    for run_number in range(1, nb_runs + 1):
+        print(f"\n\n######## Round {run_number} ########")
+        save_corrupted_data_for_agent(run_number, kaggle_dataset)
 
     return None
 
 
-
-
 if __name__ == "__main__":
     kaggle_dataset = KAGGLE_DATASET_NAME
+    run_multiple_rounds()
+
+    conn_agent = connecting_to_sqlite(kaggle_dataset, database_type="agent")
+    print(pd.read_sql("SELECT name, type FROM sqlite_master", conn_agent))

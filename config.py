@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
+KAGGLE_DATASET_NAME = "olistbr/brazilian-ecommerce"
 # other dataset to try:
 # olistbr/brazilian-ecommerce
 # shrinivasv/retail-store-star-schema-dataset

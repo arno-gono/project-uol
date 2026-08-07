@@ -137,8 +137,10 @@ def _get_general_data(df: pd.DataFrame) -> dict[str, Any]:
     dict_metadata["nb_entries"] = nb_entries
     dict_metadata["nb_columns"] = nb_columns
 
-    if df.duplicated().any():
-        dict_metadata["duplicates_distribution"] = df.duplicated().sum() / nb_entries
+    # Check if there are duplicated rows and if yes, how many as a percentage
+    nb_duplicates = int(df.duplicated().sum())
+    dict_metadata["nb_duplicated_rows"] = nb_duplicates
+    dict_metadata["duplicates_distribution"] = round(nb_duplicates / nb_entries, 4) if nb_entries else 0.0
 
     return dict_metadata
 

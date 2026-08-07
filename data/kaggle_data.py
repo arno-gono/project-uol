@@ -14,8 +14,8 @@ def _download_data_from_kaggle(kaggle_dataset: str):
 def _split_raw_table_to_clean_and_test(df: pd.DataFrame):
     len_df = len(df)
 
-    # only splitting tables that have over X rows to avoid splitting a mapping that might be used in another table
-    min_nb_rows = 100
+    # only splitting tables that have over min_nb_rows rows to avoid splitting a mapping that might be used in another table
+    min_nb_rows = 0
 
     # Split choice: Y% of the data is kept in the clean vs the test table
     split_percent = 0.95

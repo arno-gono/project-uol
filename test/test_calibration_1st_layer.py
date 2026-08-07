@@ -12,7 +12,12 @@ def test_get_general_data():
         }
     )
 
-    assert _get_general_data(df) == {"nb_entries": 3, "nb_columns": 4}
+    assert _get_general_data(df) == {
+        "nb_entries": 3,
+        "nb_columns": 4,
+        "nb_duplicated_rows": 0,
+        "duplicates_distribution": 0.0
+    }
 
     # Inserting duplicates
     df = pd.DataFrame(
@@ -27,6 +32,7 @@ def test_get_general_data():
     assert _get_general_data(df) == {
         "nb_entries": 4,
         "nb_columns": 4,
+        "nb_duplicated_rows": 1,
         "duplicates_distribution": 0.25
     }
 

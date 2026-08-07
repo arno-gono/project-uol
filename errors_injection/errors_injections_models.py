@@ -3,13 +3,15 @@ import numpy as np
 from typing import Any
 from pandas import DataFrame
 from data.utils import get_calibration_file_as_dict
+from errors_injection.injection_logs import append_injection_logs
 import pandas as pd
 
 
 # TODO
 # Listing corrupted rows: this needs to align with what we have in SQLite. The index register is not the same
 
-def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict]:
+def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[
+    str, str | float | int | list[Any] | Any]] | None:
     # Inserting another datatype in one column of the test data
     available_datatypes = ["int", "float", "bool", "str", "datetime"]
 
@@ -22,6 +24,10 @@ def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFra
     # Get the calibration file as a dictionary
     d_calibration = get_calibration_file_as_dict()
     d_calibration = d_calibration[table_name]
+
+    if col_error not in d_calibration["columns_details"]:
+        # Case where this function is run on a column that was newly created and is not in the calibration
+        return None
 
     # Finding the datatype of the column that was picked up to inject errors in
     current_datatype = d_calibration["columns_details"][col_error]["datatype"]
@@ -43,7 +49,8 @@ def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFra
         # only the datatype changes, making it harder for an agent to detect
         new_values = df.loc[mask, col_error].astype(str).tolist()
     elif new_datatype == "datetime":
-        new_values = pd.date_range("2000-01-01", "2050-12-31", periods=max(n, 1)).tolist()[:n]
+        dates = pd.date_range("2000-01-01", "2050-12-31", periods=max(n, 1))
+        new_values = dates.strftime("%Y-%m-%d %H:%M:%S").tolist()[:n]
     elif new_datatype == "int":
         new_values = [random.randint(0, 100) for _ in range(n)]
     elif new_datatype == "float":
@@ -134,10 +141,14 @@ def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[A
     return df, params
 
 
-def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | Any]]:
+def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int | Any]] | None:
     # Choosing a random column
     col_error = random.choice(df.columns)
     name_new_column = f"NEW_{col_error}"
+
+    # this column might already be in the dataset (repetition)
+    if name_new_column in df.columns:
+        return None
 
     # Inserting a new column, taking the exact same data as the column that was picked up
     df[name_new_column] = df[col_error]
@@ -150,6 +161,67 @@ def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | Any]
     }
 
     return df, params
+
+
+class ErrorInjectionsModels:
+    def __init__(self):
+
+        self.df = None
+        self.table_name = None
+        self.run_number = None
+
+        self.error_types_dict = {
+            "wrong_datatype": inject_wrong_datatype,
+            "insert_null": inject_nulls,
+            "duplicate_rows": inject_duplicate_rows,
+            "insert_column": inject_new_column,
+        }
+
+    def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
+        self.df = df_test.copy()
+        self.table_name = table_name
+        self.run_number = run_number
+
+        # Randomly choose how many errors will be injected in the given table (with maximum 5)
+        nb_error = random.randint(0, 5)
+
+        # Randomly choose the type of errors that will be injected
+        all_errors = random.choices(list(self.error_types_dict.keys()), k=nb_error)
+        print(f"Running {nb_error} errors in {table_name}. Errors: {all_errors}")
+
+        # Injecting errors in the table
+        for error_name in all_errors:
+            func_error = self.error_types_dict[error_name]
+
+            res = None
+
+            # Attributing the correct arguments per function
+            if error_name == "wrong_datatype":
+                res = func_error(self.df, self.table_name)
+            elif error_name == "insert_null":
+                res = func_error(self.df, self.table_name)
+            elif error_name == "duplicate_rows":
+                res = func_error(self.df)
+            elif error_name == "insert_column":
+                res = func_error(self.df)
+
+            # Checking if the error was actually injected
+            if res is not None:
+                print(f"\tError {error_name} was injected. Creating Log")
+                df, params = res
+                self.df = df.copy()
+
+                # Adding a log of the error injected
+                append_injection_logs(
+                    table_name=self.table_name,
+                    error_type=error_name,
+                    run_number=self.run_number,
+                    params=params
+                )
+
+        return self.df
+
+
 
 
 if __name__ == "__main__":
