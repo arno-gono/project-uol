@@ -2,13 +2,16 @@ import random
 import numpy as np
 from typing import Any
 from pandas import DataFrame
-from data.utils import get_calibration_file_as_dict
+from data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
+from data.sqlite_connector import connecting_to_sqlite
 from errors_injection.injection_logs import append_injection_logs
+from config import KAGGLE_DATASET_NAME
 import pandas as pd
 
 
 # TODO
 # Listing corrupted rows: this needs to align with what we have in SQLite. The index register is not the same
+# Delete a column from the table
 
 def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[
     str, str | float | int | list[Any] | Any]] | None:
@@ -163,6 +166,88 @@ def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int 
     return df, params
 
 
+def _get_primary_keys(table_name: str, col_name: str) -> set:
+    co_test = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="test")
+    co_clean = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
+    col_values = read_column_from_whole_dataset(table_name, col_name, co_clean, co_test)
+    co_test.close()
+    co_clean.close()
+    return set(col_values)
+
+
+def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+    # Breaking a foreign key: the key points to a parent that does not exist.
+
+    # Get the calibration file as a dictionary
+    d_calibration = get_calibration_file_as_dict()
+    d_calibration = d_calibration[table_name]
+
+    # Getting all foreign keys from the calibration file
+    foreign_keys = {col: details for col, details in d_calibration["foreign_keys"].items()
+                    if col in df.columns}
+
+    if not foreign_keys:
+        return None
+
+    # Picking a random foreign key to break
+    col_error = random.choice(list(foreign_keys))
+    parent_table = foreign_keys[col_error]["parent_table"]
+
+    # Getting primary keys so the injected ones are not existing keys
+    primary_keys = _get_primary_keys(table_name=parent_table, col_name=foreign_keys[col_error]["parent_column"])
+
+    # Choosing a threshold for the proportion of data that will be corrupted
+    threshold_orphan = random.random()
+
+    # Creating a mask determining which rows get corrupted. Rows holding no foreign key are left out
+    mask = (np.random.random(len(df)) < threshold_orphan) & df[col_error].notna().to_numpy()
+    nb_data_corrupted = int(mask.sum())
+    corrupted_rows = list(df.loc[mask].index)
+
+    # Building random foreign keys
+    def _generate_random_fkey(fkey: str) -> str:
+
+        # Two cases: swapping 2 chars, or inserting one.
+        if random.random() < 0.5:
+            # Swapping 2 characters
+            i, j = random.sample(range(len(fkey)), 2)
+            chars = list(fkey)
+            chars[i], chars[j] = chars[j], chars[i]
+            return "".join(chars)
+
+        # Inserting a random character into a random location
+        random_loc = random.choice(range(len(fkey)))
+        random_char = random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
+        random_char = random_char.upper() if random.choice(["upper", "lower"]) == "upper" else random_char
+        return fkey[:random_loc] + random_char + fkey[random_loc:]
+
+
+    def _get_corrupted_fkey(fkey: str) -> str:
+        new_fkey = _generate_random_fkey(fkey)
+        while new_fkey in primary_keys or new_fkey == fkey:
+            new_fkey = _generate_random_fkey(fkey)
+        return new_fkey
+
+    # The same key always maps to the same corrupted one, so a key repeated in the table stays repeated
+    new_values_dict = {fkey: _get_corrupted_fkey(fkey) for fkey in set(df.loc[mask, col_error])}
+    df.loc[mask, col_error] = df.loc[mask, col_error].map(new_values_dict)
+
+    # Keeping params used in injection logs
+    params = {
+        "col_error": col_error,
+        "parent_table": parent_table,
+        "parent_column": foreign_keys[col_error]["parent_column"],
+        "former_coverage": foreign_keys[col_error]["coverage"],
+        "threshold_orphan": round(threshold_orphan, 4),
+        "nb_data_corrupted": nb_data_corrupted,
+        "total_nb_rows": len(df),
+        "dict_new_foreign_keys": new_values_dict,
+        "index_row_corrupted": corrupted_rows
+    }
+
+    return df, params
+
+
 class ErrorInjectionsModels:
     def __init__(self):
 
@@ -175,6 +260,7 @@ class ErrorInjectionsModels:
             "insert_null": inject_nulls,
             "duplicate_rows": inject_duplicate_rows,
             "insert_column": inject_new_column,
+            "orphan_foreign_key": inject_orphan_foreign_key,
         }
 
     def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
@@ -204,6 +290,8 @@ class ErrorInjectionsModels:
                 res = func_error(self.df)
             elif error_name == "insert_column":
                 res = func_error(self.df)
+            elif error_name == "orphan_foreign_key":
+                res = func_error(self.df, self.table_name)
 
             # Checking if the error was actually injected
             if res is not None:
@@ -223,7 +311,6 @@ class ErrorInjectionsModels:
 
 
 
-
 if __name__ == "__main__":
     from data.sqlite_connector import connecting_to_sqlite
     from config import KAGGLE_DATASET_NAME
@@ -231,15 +318,7 @@ if __name__ == "__main__":
     conn_test = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="test")
 
     table_name = "application_record"
+    table_name = "olist_products_dataset"
     df = pd.read_sql(f"SELECT * FROM {table_name}", conn_test)
     df_raw = df.copy()
-
-    ERROR_TYPES_DICT = {
-        "wrong_datatype": inject_wrong_datatype,
-        "insert_null": inject_nulls,
-        "duplicate_primary_key": 1,
-        "duplicate_rows": inject_duplicate_rows,
-        "insert_column": inject_new_column,
-        "referential_drift": 1,
-    }
 

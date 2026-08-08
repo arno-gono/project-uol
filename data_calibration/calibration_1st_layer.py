@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import sqlite3
 from scipy.stats import contingency
+from data.utils import read_column_from_whole_dataset
 from data_calibration.calibration_cluster import get_ml_profile
 
 
@@ -317,16 +318,6 @@ def _get_fk_coverage(child_series: pd.Series, parent_series: pd.Series) -> float
     return round(float(child_series.isin(set(parent_series)).mean()), 4)
 
 
-def _read_column_from_whole_dataset(table_name: str, col_name: str, co_clean: sqlite3.Connection,
-                                    co_test: sqlite3.Connection) -> pd.Series:
-    # Some Primary keys might be split from the clean dataset when migrating Kaggle data to SQLite,
-    # preventing from mapping the Foreign Keys accurately. Reading both clean and test data together.
-    df_clean = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_clean)
-    df_test = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_test)
-
-    return pd.concat([df_clean, df_test])[col_name]
-
-
 def _get_foreign_keys_dict(table_name: str, dict_metadata: dict[str, Any], co_clean: sqlite3.Connection,
                            co_test: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     # A column is a candidate foreign key when the values of this column are actually found in the parent key column.
@@ -349,10 +340,10 @@ def _get_foreign_keys_dict(table_name: str, dict_metadata: dict[str, Any], co_cl
         if not parent_tables:
             continue
 
-        child_series = _read_column_from_whole_dataset(table_name, col_name, co_clean, co_test)
+        child_series = read_column_from_whole_dataset(table_name, col_name, co_clean, co_test)
 
         for parent_table in parent_tables:
-            parent_series = _read_column_from_whole_dataset(parent_table, col_name, co_clean, co_test)
+            parent_series = read_column_from_whole_dataset(parent_table, col_name, co_clean, co_test)
             coverage = _get_fk_coverage(child_series=child_series, parent_series=parent_series)
 
             if coverage < min_foreign_key_coverage:
