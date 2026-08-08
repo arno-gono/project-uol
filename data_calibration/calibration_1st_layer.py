@@ -292,6 +292,86 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
     return dict_metadata
 
 
+def _get_primary_key_columns(dict_metadata: dict[str, Any]) -> dict[str, list[str]]:
+    # Listing every column flagged as a potential primary key, with the tables that are holding it
+    d_primary_keys = {}
+
+    for table_name, table_details in dict_metadata.items():
+        for col_name, col_details in table_details["columns_details"].items():
+            if col_details["potential_primary_key"]:
+                if col_name in d_primary_keys:
+                    d_primary_keys[col_name].append(table_name)
+                else:
+                    d_primary_keys[col_name] = [table_name]
+
+    return d_primary_keys
+
+
+def _get_fk_coverage(child_series: pd.Series, parent_series: pd.Series) -> float:
+    # Share of the child's values that are found in the parent key
+    child_series = child_series.dropna()
+
+    if len(child_series) == 0:
+        return 0.0
+
+    return round(float(child_series.isin(set(parent_series)).mean()), 4)
+
+
+def _read_column_from_whole_dataset(table_name: str, col_name: str, co_clean: sqlite3.Connection,
+                                    co_test: sqlite3.Connection) -> pd.Series:
+    # Some Primary keys might be split from the clean dataset when migrating Kaggle data to SQLite,
+    # preventing from mapping the Foreign Keys accurately. Reading both clean and test data together.
+    df_clean = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_clean)
+    df_test = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_test)
+
+    return pd.concat([df_clean, df_test])[col_name]
+
+
+def _get_foreign_keys_dict(table_name: str, dict_metadata: dict[str, Any], co_clean: sqlite3.Connection,
+                           co_test: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    # A column is a candidate foreign key when the values of this column are actually found in the parent key column.
+    d_primary_keys = _get_primary_key_columns(dict_metadata)
+
+    d_foreign_keys = {}
+
+    # Minimum share of a column's values that must be found in the parent key for the pair to be recorded as a
+    # foreign key
+    min_foreign_key_coverage = 0.9
+
+    for col_name in dict_metadata[table_name]["columns_details"]:
+
+        # Only keeping the parents that are in another table than the one being profiled
+        parent_tables = []
+
+        if col_name in d_primary_keys:
+            parent_tables = [t for t in d_primary_keys[col_name] if t != table_name]
+
+        if not parent_tables:
+            continue
+
+        child_series = _read_column_from_whole_dataset(table_name, col_name, co_clean, co_test)
+
+        for parent_table in parent_tables:
+            parent_series = _read_column_from_whole_dataset(parent_table, col_name, co_clean, co_test)
+            coverage = _get_fk_coverage(child_series=child_series, parent_series=parent_series)
+
+            if coverage < min_foreign_key_coverage:
+                continue
+
+            # A column can match several parents. Only the best covered one is kept as the relationship.
+            if col_name in d_foreign_keys and d_foreign_keys[col_name]["coverage"] >= coverage:
+                continue
+
+            # Keeping a relationship foreign to primary key mapping in the calibration.
+            d_foreign_keys[col_name] = {
+                "parent_table": parent_table,
+                "parent_column": col_name,
+                "coverage": coverage,
+            }
+
+    return d_foreign_keys
+
+
 def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, Any]:
     # This function loops through all tables and views available in the dataset passed as argument.
     # For each table, we save the metadata as a dictionary, and aggregate them in a list of dictionaries.
@@ -309,7 +389,17 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
         dict_table_metadata = _get_metadata_profiling_from_table(table_name=n, co=conn)
         dict_metadata[n] = {"type": t} | dict_table_metadata
 
+    # Potential foreign keys are searched once all tables have been profiled
+    # and potential primary keys have been identified.
+    conn_test = connecting_to_sqlite(kaggle_dataset, database_type="test")
+
+    for table_name in dict_metadata:
+        print(f"Looking for foreign keys in {table_name}")
+        dict_metadata[table_name]["porential_foreign_keys"] = _get_foreign_keys_dict(
+            table_name=table_name, dict_metadata=dict_metadata, co_clean=conn, co_test=conn_test)
+
     conn.close()
+    conn_test.close()
 
     return dict_metadata
 
@@ -335,9 +425,9 @@ def dataset_calibration():
 
 
 if __name__ == "__main__":
-    d_metadata = dataset_calibration()
+    # d_metadata = dataset_calibration()
 
-    # table_name = "application_record"
-    # table_name = "olist_orders_dataset"
-    # kaggle_dataset: str = KAGGLE_DATASET_NAME
-    # co = connecting_to_sqlite(kaggle_dataset, database_type="clean")
+    table_name = "application_record"
+    table_name = "olist_orders_dataset"
+    kaggle_dataset: str = KAGGLE_DATASET_NAME
+    co = connecting_to_sqlite(kaggle_dataset, database_type="clean")
