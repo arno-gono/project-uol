@@ -248,6 +248,107 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     return df, params
 
 
+def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+    # Inserting a category that was not seen at calibration time, impacting cardinality distribution.
+    available_labels = ["UNKNOWN", "N/A", "-99999", "TO_BE_DEFINED", "OTHER", "Not available", "Not applicable"]
+
+    # Get the calibration file as a dictionary
+    d_calibration = get_calibration_file_as_dict()
+    d_calibration = d_calibration[table_name]
+
+    # Selecting categorical columns that are strings and not primary keys.
+    categorical_columns = [col for col, details in d_calibration["columns_details"].items()
+                           if details["cardinality_distribution"] is not None
+                           and details["datatype"] == "str"
+                           and details["potential_primary_key"] is False
+                           and col in df.columns]
+
+    if not categorical_columns:
+        return None
+
+    # Picking a random column and the label that will be inserted in it
+    col_error = random.choice(categorical_columns)
+
+    # Ensuring the label that will be picked is not in the column picked up
+    available_labels = [label for label in available_labels if label not in df[col_error].unique()]
+    new_label = random.choice(available_labels)
+
+    # Choosing a threshold for the proportion of data that will be corrupted
+    threshold_category = random.random()
+
+    # Creating a mask determining which rows get corrupted
+    mask = np.random.random(len(df)) < threshold_category
+    nb_data_corrupted = int(mask.sum())
+    corrupted_rows = list(df.loc[mask].index)
+
+    df.loc[mask, col_error] = new_label
+
+    # Keeping params used in injection logs
+    params = {
+        "col_error": col_error,
+        "new_label": new_label,
+        "known_categories": list(d_calibration["columns_details"][col_error]["cardinality_distribution"]),
+        "threshold_category": round(threshold_category, 4),
+        "nb_data_corrupted": nb_data_corrupted,
+        "total_nb_rows": len(df),
+        "index_row_corrupted": corrupted_rows
+    }
+
+    return df, params
+
+
+def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+    # Shuffling the values of one column that has high correlation with another column. Distribution and cardinality
+    # for the shuffled value stays the same, but the correlation with the column it is correlated with is impacted
+    min_correlation = 0.3
+
+    # Get the calibration file as a dictionary
+    d_calibration = get_calibration_file_as_dict()
+    d_calibration = d_calibration[table_name]
+
+    # Keeping the pairs that are correlated enough for a break to be measurable, and whose two columns
+    # are both still in the dataframe
+    correlated_pairs = [pair for pair, correlation in d_calibration["correlations"].items()
+                        if abs(correlation) >= min_correlation
+                        and all(col.strip() in df.columns for col in pair.split("|"))]
+
+    if not correlated_pairs:
+        return None
+
+    # Picking a random pair, and randomly choosing which column will be shuffled
+    pair = random.choice(correlated_pairs)
+    col_paired, col_error = random.sample([col.strip() for col in pair.split("|")], k=2)
+
+    # Choosing a threshold for the proportion of data that will be corrupted
+    threshold_correlation = random.random()
+
+    # Creating a mask determining which rows get corrupted
+    mask = np.random.random(len(df)) < threshold_correlation
+    nb_data_corrupted = int(mask.sum())
+    corrupted_rows = list(df.loc[mask].index)
+
+    # Calculating correlations on corrupted rows before and after injecting errors.
+    former_correlation = round(float(df[col_paired].corr(df[col_error])), 4)
+
+    # Shuffling the columns' values for the rows that were picked up
+    df.loc[mask, col_error] = df.loc[mask, col_error].sample(frac=1).tolist()
+
+    # Keeping params used in injection logs
+    params = {
+        "col_error": col_error,
+        "col_paired": col_paired,
+        "calibrated_correlation": d_calibration["correlations"][pair],
+        "former_correlation": former_correlation,
+        "new_correlation": round(float(df[col_paired].corr(df[col_error])), 4),
+        "threshold_correlation": round(threshold_correlation, 4),
+        "nb_data_corrupted": nb_data_corrupted,
+        "total_nb_rows": len(df),
+        "index_row_corrupted": corrupted_rows
+    }
+
+    return df, params
+
+
 class ErrorInjectionsModels:
     def __init__(self):
 
@@ -261,6 +362,8 @@ class ErrorInjectionsModels:
             "duplicate_rows": inject_duplicate_rows,
             "insert_column": inject_new_column,
             "orphan_foreign_key": inject_orphan_foreign_key,
+            "new_category": inject_new_category,
+            "correlation_break": inject_correlation_break,
         }
 
     def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
@@ -292,6 +395,10 @@ class ErrorInjectionsModels:
                 res = func_error(self.df)
             elif error_name == "orphan_foreign_key":
                 res = func_error(self.df, self.table_name)
+            elif error_name == "new_category":
+                res = func_error(self.df, self.table_name)
+            elif error_name == "correlation_break":
+                res = func_error(self.df, self.table_name)
 
             # Checking if the error was actually injected
             if res is not None:
@@ -308,7 +415,6 @@ class ErrorInjectionsModels:
                 )
 
         return self.df
-
 
 
 if __name__ == "__main__":
