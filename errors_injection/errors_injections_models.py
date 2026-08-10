@@ -183,7 +183,7 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     d_calibration = d_calibration[table_name]
 
     # Getting all foreign keys from the calibration file
-    foreign_keys = {col: details for col, details in d_calibration["foreign_keys"].items()
+    foreign_keys = {col: details for col, details in d_calibration["potential_foreign_key"].items()
                     if col in df.columns}
 
     if not foreign_keys:
@@ -349,6 +349,58 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
     return df, params
 
 
+def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+    # Giving a few rows a primary key that another row already uses.
+
+    # Get the calibration file as a dictionary
+    d_calibration = get_calibration_file_as_dict()
+    d_calibration = d_calibration[table_name]
+
+    # Selecting potential primary keys
+    primary_keys = [col for col, details in d_calibration["columns_details"].items()
+                    if details["potential_primary_key"] and col in df.columns]
+
+    if not primary_keys:
+        return None
+
+    # Picking a random key to duplicate
+    col_error = random.choice(primary_keys)
+
+    # Choosing a threshold for the proportion of data that will be corrupted
+    threshold_duplicate_key = random.random()
+
+    # Creating a mask determining which rows get corrupted.
+    mask = np.random.random(len(df)) < threshold_duplicate_key
+    nb_data_corrupted = int(mask.sum())
+
+    if nb_data_corrupted == 0:
+        return None
+
+    corrupted_rows = list(df.loc[mask].index)
+
+    # Selecting all keys available that will be copied from (the mask's inverse)
+    keys_available = df.loc[~mask, col_error].dropna().unique()
+
+    if len(keys_available) == 0:
+        return None
+
+    nb_unique_keys_before = int(df[col_error].nunique())
+    df.loc[mask, col_error] = list(np.random.choice(keys_available, size=nb_data_corrupted))
+
+    # Keeping params used in injection logs
+    params = {
+        "col_error": col_error,
+        "threshold_duplicate_key": round(threshold_duplicate_key, 4),
+        "nb_data_corrupted": nb_data_corrupted,
+        "nb_unique_keys_before": nb_unique_keys_before,
+        "nb_keys_duplicated": int((df[col_error].value_counts() > 1).sum()),
+        "total_nb_rows": len(df),
+        "index_row_corrupted": corrupted_rows
+    }
+
+    return df, params
+
+
 class ErrorInjectionsModels:
     def __init__(self):
 
@@ -364,6 +416,7 @@ class ErrorInjectionsModels:
             "orphan_foreign_key": inject_orphan_foreign_key,
             "new_category": inject_new_category,
             "correlation_break": inject_correlation_break,
+            "duplicate_primary_key": inject_duplicate_primary_key,
         }
 
     def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
@@ -398,6 +451,8 @@ class ErrorInjectionsModels:
             elif error_name == "new_category":
                 res = func_error(self.df, self.table_name)
             elif error_name == "correlation_break":
+                res = func_error(self.df, self.table_name)
+            elif error_name == "duplicate_primary_key":
                 res = func_error(self.df, self.table_name)
 
             # Checking if the error was actually injected

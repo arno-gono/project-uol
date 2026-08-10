@@ -386,7 +386,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
 
     for table_name in dict_metadata:
         print(f"Looking for foreign keys in {table_name}")
-        dict_metadata[table_name]["porential_foreign_keys"] = _get_foreign_keys_dict(
+        dict_metadata[table_name]["potential_foreign_key"] = _get_foreign_keys_dict(
             table_name=table_name, dict_metadata=dict_metadata, co_clean=conn, co_test=conn_test)
 
     conn.close()
