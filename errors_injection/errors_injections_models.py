@@ -349,6 +349,93 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
     return df, params
 
 
+def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+    # Shifting a numerical column by x standard deviation, affecting both the standard deviation of the data but also
+    # the mean if the data is moved toward a single direction. The function handles both cases.
+    available_nb_std = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+
+    # Get the calibration file as a dictionary
+    d_calibration = get_calibration_file_as_dict()
+    d_calibration = d_calibration[table_name]
+
+    def _has_std(values_distribution: dict[str, Any] | None) -> bool:
+        # Checking if the calibration measured a standard deviation (from .describe() pandas method)
+        if not values_distribution or "std" not in values_distribution:
+            return False
+        return True
+
+    # Numerical columns that are not keys and that the calibration measured a standard deviation for
+    numerical_columns = [col for col, details in d_calibration["columns_details"].items()
+                         if details["datatype"] in ["int", "float"]
+                         and details["potential_primary_key"] is False
+                         and _has_std(details["values_distribution"])
+                         and col in df.columns]
+
+    if not numerical_columns:
+        return None
+
+    # Picking a random column and how far its values move
+    col_error = random.choice(numerical_columns)
+    values_distribution = d_calibration["columns_details"][col_error]["values_distribution"]
+
+    nb_std = random.choice(available_nb_std)
+    shift = nb_std * values_distribution["std"]
+
+    # Two ways of moving values: every row in the same direction (shifting also the mean) or randomly shifting positive
+    #  and negative, leaving mean unchanged.
+    mode = random.choice(["shift", "spread"])
+
+    # Choosing a threshold for the proportion of data that will be corrupted
+    threshold_shift = random.random()
+
+    # Creating a mask determining which rows get corrupted. Rows holding no value have nothing to shift
+    mask = (np.random.random(len(df)) < threshold_shift) & df[col_error].notna().to_numpy()
+    nb_data_corrupted = int(mask.sum())
+
+    if nb_data_corrupted == 0:
+        return None
+
+    corrupted_rows = list(df.loc[mask].index)
+
+    if mode == "shift":
+        directions = np.full(nb_data_corrupted, random.choice([-1, 1]))
+    else:
+        directions = np.random.choice([-1, 1], size=nb_data_corrupted)
+
+    # Measuring the mean and the spread on the corrupted rows, before and after
+    former_mean = round(float(df.loc[mask, col_error].mean()), 4)
+    former_std = round(float(df.loc[mask, col_error].std()), 4)
+
+    df.loc[mask, col_error] = df.loc[mask, col_error] + directions * shift
+
+    # Casting result as integer if datatype is integer
+    if d_calibration["columns_details"][col_error]["datatype"] == "int":
+        df.loc[mask, col_error] = df.loc[mask, col_error].apply(lambda x: int(x))
+
+    # Keeping params used in injection logs
+    params = {
+        "col_error": col_error,
+        "calibrated_mean": values_distribution["mean"],
+        "calibrated_std": values_distribution["std"],
+        "calibrated_min": values_distribution["min"],
+        "calibrated_max": values_distribution["max"],
+        "nb_std_shifted": nb_std,
+        "mode": mode,
+        "direction": int(directions[0]) if mode == "shift" else None,
+        "shift_applied": shift,
+        "former_mean": former_mean,
+        "new_mean": round(float(df.loc[mask, col_error].mean()), 4),
+        "former_std": former_std,
+        "new_std": round(float(df.loc[mask, col_error].std()), 4),
+        "threshold_shift": round(threshold_shift, 4),
+        "nb_data_corrupted": nb_data_corrupted,
+        "total_nb_rows": len(df),
+        "index_row_corrupted": corrupted_rows
+    }
+
+    return df, params
+
+
 def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Giving a few rows a primary key that another row already uses.
 
@@ -417,6 +504,7 @@ class ErrorInjectionsModels:
             "new_category": inject_new_category,
             "correlation_break": inject_correlation_break,
             "duplicate_primary_key": inject_duplicate_primary_key,
+            "distribution_shift": inject_distribution_shift,
         }
 
     def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
@@ -453,6 +541,8 @@ class ErrorInjectionsModels:
             elif error_name == "correlation_break":
                 res = func_error(self.df, self.table_name)
             elif error_name == "duplicate_primary_key":
+                res = func_error(self.df, self.table_name)
+            elif error_name == "distribution_shift":
                 res = func_error(self.df, self.table_name)
 
             # Checking if the error was actually injected
