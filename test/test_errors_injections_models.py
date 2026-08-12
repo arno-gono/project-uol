@@ -1,5 +1,5 @@
 import pandas as pd
-from errors_injection.errors_injections_models import inject_new_column
+from errors_injection.errors_injections_models import inject_new_column, inject_duplicate_rows
 
 
 def test_inject_new_column():
@@ -22,3 +22,18 @@ def test_inject_new_column():
     }
 
 
+def test_inject_duplicate_rows():
+    df = pd.DataFrame(
+        {
+            "COLUMN_A": [1, 2, 3, 4, 5],
+            "COLUMN_B": ["a", "b", "c", "d", "e"],
+        }
+    )
+
+    # The rows being duplicated are picked randomly
+    df_injected, params = inject_duplicate_rows(df)
+
+    assert len(df_injected) >= len(df)
+    assert len(df_injected.drop_duplicates()) == len(df)
+    assert len(df) == params["total_nb_rows_before_dups"]
+    assert len(df_injected) == params["total_nb_rows_before_dups"] + params["nb_duplicated_rows_inserted"]
