@@ -420,5 +420,5 @@ if __name__ == "__main__":
 
     table_name = "application_record"
     table_name = "olist_orders_dataset"
-    kaggle_dataset: str = KAGGLE_DATASET_NAME
-    co = connecting_to_sqlite(kaggle_dataset, database_type="clean")
+    kaggle_dataset = KAGGLE_DATASET_NAME
+    # co = connecting_to_sqlite(kaggle_dataset, database_type="clean")

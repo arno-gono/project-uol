@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-KAGGLE_DATASET_NAME = "olistbr/brazilian-ecommerce"
+KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
 # other dataset to try:
 # olistbr/brazilian-ecommerce
 # shrinivasv/retail-store-star-schema-dataset
@@ -34,3 +34,9 @@ MAX_CARDINALITY_NB = 100
 # Minimum share of the non-null values of a string column that must parse as dates for the column to be
 # flagged as a datetime one. Left below 1 so that a few dirty values do not disqualify a genuine date column.
 MIN_DATETIME_PARSE_RATIO = 0.95
+
+### Agent ###
+
+# Model the agent runs on, and a ceiling in tokens being used (cost control).
+AGENT_MODEL = "claude-haiku-4-5"
+AGENT_MAX_TOKENS = 1_000

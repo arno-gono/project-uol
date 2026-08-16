@@ -129,7 +129,6 @@ if __name__ == "__main__":
     # open a connection
     conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
     kaggle_dataset = KAGGLE_DATASET_NAME
-    print("Hello")
 
     download_kaggle_upload_to_sqlite(KAGGLE_DATASET_NAME)
 
@@ -143,6 +142,6 @@ if __name__ == "__main__":
     # df = pd.read_sql(f"SELECT * FROM {table_name} LIMIT 10", conn)
 
     conn.close()
-    print("END")
+
 
 

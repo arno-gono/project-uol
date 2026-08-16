@@ -117,7 +117,7 @@ def run_multiple_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
     _copy_calibration_files()
 
     # Looping nb_rounds times
-    nb_runs = 5
+    nb_runs = 1
 
     for run_number in range(1, nb_runs + 1):
         print(f"\n\n######## Round {run_number} ########")
