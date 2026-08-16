@@ -48,8 +48,5 @@ def append_injection_logs(table_name: str, error_type: str, run_number: int, **p
     return None
 
 if __name__ == "__main__":
-    if '1' == '2':
-        append_injection_logs(table_name='test_table', error_type='error', run_number=2, hi="prout", threshold=0.22)
-        clean_injection_logs(test="test", youpu="foff")
-
-        q = _read_injection_logs()
+    append_injection_logs(table_name='test_table', error_type='error', run_number=2, hi="test", threshold=0.22)
+    q = _read_injection_logs()

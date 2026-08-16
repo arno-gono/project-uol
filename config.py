@@ -7,6 +7,10 @@ KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
 # shrinivasv/retail-store-star-schema-dataset
 # rikdifos/credit-card-approval-prediction
 
+# Managing API cost for iterating purposes. cutting all tables to a max of KAGGLE_TABLE_MAX_ROWS
+# Use None to uncap
+KAGGLE_TABLE_MAX_ROWS = 700
+
 # All db files are stored within a specific folder, anchored to this file so that
 # the path is the same no matter which directory the script is run from
 DB_DIR = Path(__file__).resolve().parent / "db_files"
@@ -39,4 +43,5 @@ MIN_DATETIME_PARSE_RATIO = 0.95
 
 # Model the agent runs on, and a ceiling in tokens being used (cost control).
 AGENT_MODEL = "claude-haiku-4-5"
-AGENT_MAX_TOKENS = 1_000
+AGENT_MAX_TOKENS = 3_000
+AGENT_LOG_DIR = LOGS_DIR / "agent_logs.json"

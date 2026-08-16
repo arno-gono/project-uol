@@ -8,7 +8,7 @@ def main():
     download_kaggle_upload_to_sqlite()
 
     # Data profiling: writing a calibration file on the data considered clean
-    dataset_calibration()
+    calibration = dataset_calibration()
 
     # Automation loop: running loops of errors randomly injected into a dataset and calling an agent investigation
     nb_runs = 1

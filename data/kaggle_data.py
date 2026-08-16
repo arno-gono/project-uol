@@ -2,7 +2,7 @@ import kagglehub
 import pandas as pd
 import os
 from data.sqlite_connector import connecting_to_sqlite
-from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME
+from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS
 
 
 def _download_data_from_kaggle(kaggle_dataset: str):
@@ -46,6 +46,9 @@ def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
     for file in os.listdir(path_kaggle_data):
         # reading csv file as a dataframe
         df = pd.read_csv(f"{path_kaggle_data}/{file}")
+
+        if KAGGLE_TABLE_MAX_ROWS is not None:
+            df = df.head(KAGGLE_TABLE_MAX_ROWS)
 
         # Each table is saved in 3 different versions. the _raw table is the full data available.
         # the table is then split in 2: a _clean table, which will be used for calibration, and a _test table where

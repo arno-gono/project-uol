@@ -84,8 +84,6 @@ def save_corrupted_data_for_agent(run_number: int, kaggle_dataset: str = KAGGLE_
         # The final df will have to be saved as a SQL database for views to be created
         df_final.to_sql(table, conn_agent, if_exists="replace", index=False)
 
-        # Next Step is to actually call the agent to start its analysis
-
     conn_clean.close()
     conn_test.close()
     conn_agent.close()

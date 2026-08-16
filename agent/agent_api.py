@@ -72,7 +72,7 @@ def ask_agent(user_input: str) -> Message:
         total_input_tokens += response.usage.input_tokens
         total_output_tokens += response.usage.output_tokens
 
-        print(f"Round {round_number}: {response.usage.input_tokens} tokens sent, "
+        print(f"\nRound {round_number}: {response.usage.input_tokens} tokens sent, "
               f"{response.usage.output_tokens} written back "
               f"(total so far: {total_input_tokens} in / {total_output_tokens} out). "
               f"{len(tool_uses)} tool calls")
@@ -126,9 +126,6 @@ def ask_agent(user_input: str) -> Message:
 
     print(f"\nInvestigation over in {round_number} rounds, "
           f"{total_input_tokens} tokens sent and {total_output_tokens} written back\n")
-
-    # Printing the result of the investigation
-    print("\n".join(block.text for block in response.content if block.type == "text"))
 
     # Returning the overall response from the conversation
     return response

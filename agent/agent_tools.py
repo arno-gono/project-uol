@@ -4,6 +4,7 @@ from data.utils import get_calibration_file_as_dict
 from data.sqlite_connector import connecting_to_sqlite
 
 # Available tools for the agent. Format as per Claude's Documentation.
+# This lists the functions available, what they do, the arguments they take so that they can be called by the agent.
 # Doc: https://platform.claude.com/docs/en/agents-and-tools/tool-use/build-a-tool-using-agent
 TOOLS = [
     {
@@ -37,7 +38,7 @@ def run_sql(query: str) -> dict:
     # tool allowing to read the database.
     # Only allowing SELECT clauses to be run
 
-    if not query.lower()[:6]:
+    if not query.lower()[:6] == "select":
         return {"error": "only SELECT queries are allowed"}
 
     conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="agent")
@@ -46,6 +47,7 @@ def run_sql(query: str) -> dict:
         df = pd.read_sql(f"SELECT * FROM ({query})", conn)
     except Exception as e:
         # The error is handed back to the agent so it can correct its query and try again.
+        print(f"\t\033[91mquery failed: {e}\033[0m")
         return {"error": f"query failed: {e}"}
     finally:
         conn.close()
@@ -62,6 +64,7 @@ def read_calibration(table_name: str) -> dict:
 
     if table_name not in d_calibration:
         # Listing what exists rather than just refusing, so the agent can correct itself
+        print(f"\t\033[91merror: {table_name} was not calibrated. Calibrated tables: {list(d_calibration.keys())}\033[0m")
         return {"error": f"{table_name} was not calibrated", "calibrated_tables": list(d_calibration.keys())}
 
     return d_calibration[table_name]
