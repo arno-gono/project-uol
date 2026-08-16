@@ -1,6 +1,6 @@
 import pandas as pd
-
 from config import KAGGLE_DATASET_NAME
+from data.utils import get_calibration_file_as_dict
 from data.sqlite_connector import connecting_to_sqlite
 
 # Available tools for the agent. Format as per Claude's Documentation.
@@ -16,6 +16,18 @@ TOOLS = [
                 "query": {"type": "string", "description": "A single SELECT statement"},
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "read_calibration",
+        "description": f"Read the JSON file with calibration data and return it as a dictionary.  "
+                       f"It is run on the clean data, ie before the new rows were added to the tables. ",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "table_name": {"type": "string", "description": "Name of the table the data profile is wanted for"},
+            },
+            "required": ["table_name"],
         },
     }
 ]
@@ -43,8 +55,21 @@ def run_sql(query: str) -> dict:
         "rows": df.to_dict(orient="records"),
     }
 
+
+def read_calibration(table_name: str) -> dict:
+    # Allowing the agent to access the calibration file
+    d_calibration = get_calibration_file_as_dict()
+
+    if table_name not in d_calibration:
+        # Listing what exists rather than just refusing, so the agent can correct itself
+        return {"error": f"{table_name} was not calibrated", "calibrated_tables": list(d_calibration.keys())}
+
+    return d_calibration[table_name]
+
+
 # The model refers to the tools by their name. Mapping tools names with their function in the following dictionary
 TOOLS_FUNCTIONS = {
     "run_sql": run_sql,
+    "read_calibration": read_calibration
 }
 

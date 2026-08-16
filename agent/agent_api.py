@@ -138,8 +138,14 @@ if __name__ == "__main__":
 
     user_input = """You are a data quality analyst working on a database that has just received a new batch of
     rows.
+    
+    Before adding the rows, the data was profiled into a file called calibration, which maps all tables and
+    columns: number of rows, columns, datatype, distribution, correlations, primary and foreign keys, and also
+    clustering using machine learning techniques. 
+    
+    The new rows were appended after the clean data. 
 
-    Investigate and report how many tables are available and the number of rows they have."""
+    Investigate and report anything that looks anomalous compared with the calibration file."""
 
     response = ask_agent(user_input)
 

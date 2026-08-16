@@ -18,17 +18,6 @@ def _clean_db_agent() -> None:
     return
 
 
-def _copy_calibration_files() -> None:
-    # Getting the path of the JSON calibration file
-    path_calibration_file = get_calibration_file_path()
-    file_name = path_calibration_file.split("/")[-1]
-
-    # Pasting in the db_agent folder
-    shutil.copy(path_calibration_file, f"{DB_DIR_AGENT}/{file_name}")
-
-    return None
-
-
 def _get_all_tables_from_database(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> list[str]:
     conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
 
@@ -104,7 +93,7 @@ def save_corrupted_data_for_agent(run_number: int, kaggle_dataset: str = KAGGLE_
     return
 
 
-def run_multiple_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
+def run_multiple_rounds(run_number: int, kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
     """
         Function that runs several rounds of injection. Each round selects a random number of tables
         which will have errors injected into.
@@ -113,15 +102,8 @@ def run_multiple_rounds(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
     # Cleaning the injection log file for a fresh start
     clean_injection_logs(kaggle_dataset=kaggle_dataset)
 
-    # The JSON for the calibration also needs to be available to the agent.
-    _copy_calibration_files()
-
-    # Looping nb_rounds times
-    nb_runs = 1
-
-    for run_number in range(1, nb_runs + 1):
-        print(f"\n\n######## Round {run_number} ########")
-        save_corrupted_data_for_agent(run_number, kaggle_dataset)
+    # Randomly injecting errors into the Test dataset
+    save_corrupted_data_for_agent(run_number, kaggle_dataset)
 
     return None
 
