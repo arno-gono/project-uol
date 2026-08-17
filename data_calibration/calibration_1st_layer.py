@@ -395,12 +395,29 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
     return dict_metadata
 
 
+def _round_floats(data, nb_decimals: int = 4):
+    # Rounding all numbers to a maximum of nb_decimals. Storing data with 10+ floating decimals which
+    # are passed on to the agent for every single request to the API. Trimming float numbers lightens the size
+    # of the calibration file, and therefore the cost for the investigations.
+    if isinstance(data, float):
+        # numpy floats are a subclass of float, casting keeps the value a plain float in the JSON file
+        return float(round(data, nb_decimals))
+
+    if isinstance(data, dict):
+        return {k: _round_floats(v, nb_decimals) for k, v in data.items()}
+
+    if isinstance(data, list):
+        return [_round_floats(v, nb_decimals) for v in data]
+
+    return data
+
+
 def _save_metadata(dict_data: dict, dataset_name: str = DB_NAME):
     # Saving data under the name of the dataset name
     path_json_file = os.path.join(DB_DIR, f"{dataset_name}.json")
 
     with open(path_json_file, "w") as f:
-        json.dump(dict_data, f, indent=4, default=str)
+        json.dump(_round_floats(dict_data), f, indent=4, default=str)
 
     return None
 

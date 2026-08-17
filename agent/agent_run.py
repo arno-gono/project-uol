@@ -27,7 +27,7 @@ Table name | Column Name | Metric | Calibrated | Current | Severity
 Example:
 ### **OUTPUT**
 Table A | Col A | NULLs | 0 | 10 | Critical
-Table B | Col A & Col B | Correlation | 54% | 13% | Important
+Table B | Col A & Col B | Correlation | 54% | 13% | Critical
 Table C | Col C | Mean | 54 | 50 | Medium
 """
 
