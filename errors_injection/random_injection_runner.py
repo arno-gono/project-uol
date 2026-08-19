@@ -78,11 +78,9 @@ def save_corrupted_data_for_agent(run_number: int, kaggle_dataset: str = KAGGLE_
             # Inject errors in the _test df
             df_test = error_inject_runner.run_errors(df_test=df_test, table_name=table, run_number=run_number)
 
-        # Add the error data to the _clean dataset and save for the agent
-        df_final = pd.concat([df_clean, df_test])
-
-        # The final df will have to be saved as a SQL database for views to be created
-        df_final.to_sql(table, conn_agent, if_exists="replace", index=False)
+        # Saving both the clean and test data for the agent under 2 separate tables
+        df_clean.to_sql(table, conn_agent, if_exists="replace", index=False)
+        df_test.to_sql(f"{table}_new_data", conn_agent, if_exists="replace", index=False)
 
     conn_clean.close()
     conn_test.close()

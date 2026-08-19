@@ -10,11 +10,12 @@ from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
 load_dotenv()
 
 
-def ask_agent(user_input: str) -> Message:
+def ask_agent(user_input: str, system_prompt: str) -> Message:
     """
         Loop for the agent's investigation, which is a back and forth using Anthropic API.
 
-        A question is sent with available tools (Python functions in this case).
+        A question is sent with available tools (Python functions in this case), and a system prompt
+        holding the instructions that apply to every round rather than to that one question.
         The model answers with suggestions to run some tools (in the form or arguments for a function).
         The tools are being run, the result is sent back as a new API request. Anthropic analyses the request and
         sends back another tool to be run, until the agent has enough information to answer the question.
@@ -32,6 +33,7 @@ def ask_agent(user_input: str) -> Message:
         https://platform.claude.com/docs/en/api/messages to format the message sent to Anthropic (class Message)
         https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use for tool calls
         https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls format for the tools results
+        https://platform.claude.com/docs/en/build-with-claude/prompt-caching cost management: caching
     """
 
     # Create a client, reading ANTHROPIC_API_KEY from the .env file.
@@ -46,6 +48,8 @@ def ask_agent(user_input: str) -> Message:
     # Counting the tokens being used per call for logs / cost optimization
     total_input_tokens = 0
     total_output_tokens = 0
+    total_cache_written = 0
+    total_cache_read = 0
     round_number = 0
 
     # Loop until the agent stops asking for tools. Each iteration runs the tools it asked for, appends their
@@ -53,11 +57,13 @@ def ask_agent(user_input: str) -> Message:
     while True:
         round_number += 1
 
-        # Call to Anthropic API.
+        # Call to Anthropic API. Asking Anthropic to cache the conversation.
         # Doc: https://platform.claude.com/docs/en/api/python/beta/messages/create
         response = client.messages.create(
             model=AGENT_MODEL,
             max_tokens=AGENT_MAX_TOKENS,
+            cache_control={"type": "ephemeral"},
+            system=system_prompt,
             tools=TOOLS,
             messages=messages
         )
@@ -67,12 +73,20 @@ def ask_agent(user_input: str) -> Message:
         # Doc: https://platform.claude.com/docs/en/agents-and-tools/tool-use/parallel-tool-use
         tool_uses = [block for block in response.content if block.type == "tool_use"]
 
-        # Token usage can be extracted from the response. Cost Management.
-        # Doc: https://platform.claude.com/docs/en/api/python/beta/messages/create
-        total_input_tokens += response.usage.input_tokens
-        total_output_tokens += response.usage.output_tokens
+        # Token usage can be extracted from the response for cost management and efficiency of the model.
+        # Tokens for caching are separate and also need to be taken into account.
+        # They need to be extracted and aggregated each round as the response does not hold cumulative token.
+        cache_written = response.usage.cache_creation_input_tokens or 0
+        cache_read = response.usage.cache_read_input_tokens or 0
+        input_tokens = response.usage.input_tokens + cache_written + cache_read
 
-        print(f"\nRound {round_number}: {response.usage.input_tokens} tokens sent, "
+        total_input_tokens += input_tokens
+        total_output_tokens += response.usage.output_tokens
+        total_cache_written += cache_written
+        total_cache_read += cache_read
+
+        print(f"\nRound {round_number}: {input_tokens} tokens sent "
+              f"({cache_read} read from the cache, {cache_written} written to it), "
               f"{response.usage.output_tokens} written back "
               f"(total so far: {total_input_tokens} in / {total_output_tokens} out). "
               f"{len(tool_uses)} tool calls")
@@ -125,7 +139,8 @@ def ask_agent(user_input: str) -> Message:
         messages.append({"role": "user", "content": tool_results})
 
     print(f"\nInvestigation over in {round_number} rounds, "
-          f"{total_input_tokens} tokens sent and {total_output_tokens} written back\n")
+          f"{total_input_tokens} tokens sent and {total_output_tokens} written back. "
+          f"{total_cache_read} tokens were read from the cache and {total_cache_written} written to it\n")
 
     # Returning the overall response from the conversation
     return response
@@ -133,17 +148,7 @@ def ask_agent(user_input: str) -> Message:
 
 if __name__ == "__main__":
 
-    user_input = """You are a data quality analyst working on a database that has just received a new batch of
-    rows.
-    
-    Before adding the rows, the data was profiled into a file called calibration, which maps all tables and
-    columns: number of rows, columns, datatype, distribution, correlations, primary and foreign keys, and also
-    clustering using machine learning techniques. 
-    
-    The new rows were appended after the clean data. 
-
-    Investigate and report anything that looks anomalous compared with the calibration file."""
-
-    response = ask_agent(user_input)
+    from agent.agent_run import prompt_agent, system_prompt_agent
+    response = ask_agent(user_input=prompt_agent, system_prompt=system_prompt_agent)
 
 

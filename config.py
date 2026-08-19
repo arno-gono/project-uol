@@ -9,7 +9,7 @@ KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
 
 # Managing API cost for iterating purposes. cutting all tables to a max of KAGGLE_TABLE_MAX_ROWS
 # Use None to uncap
-KAGGLE_TABLE_MAX_ROWS = 700
+KAGGLE_TABLE_MAX_ROWS = 1_000
 
 # All db files are stored within a specific folder, anchored to this file so that
 # the path is the same no matter which directory the script is run from
