@@ -1,13 +1,19 @@
 from agent.agent_api import ask_agent
 from config import AGENT_LOG_DIR
 from datetime import datetime, timezone
+from errors_injection.errors_injections_models import ERROR_TYPES_DICT
+from errors_injection.injection_logs import find_latest_id
 import json
 
+
+# Importing the types of errors as a reference for the agent. This will be needed to reconcile with the
+# logs for injected errors
+error_types = ", ".join(ERROR_TYPES_DICT.keys())
 
 # Writing a System prompt in order to not add it to the conversation every round of the investigation.
 # Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#give-claude-a-role
 
-system_prompt_agent = """You are a data quality analyst investigating a SQLite database.
+system_prompt_agent = f"""You are a data quality analyst investigating a SQLite database.
 
 ### **THE SETUP**
  
@@ -45,9 +51,17 @@ use a COUNT, AVG, GROUP BY or LIMIT in your statement.
 End your investigation with a section starting with ### **OUTPUT**, one finding per line, in this
 format:
 
-Table name | Column Name | Metric | Calibrated | Current | Number of affected rows | Severity
+Table name | Column Name | Anomaly | Calibrated | Current | Number of affected rows | Severity
 
-Example:
+- "Calibrated" and "Current" column: No need to have details. For example if the calibrated datatype is text and 
+you flag numeric entries, enter "Text values" for Calibrated and "Numeric values" for Current. If this is for a 
+correlation, enter "53.5" for Calibrated directly and "34.5" for Current if this is what you calculate. No need for
+excessive details
+- "Anomaly column: it is the type of anomaly that has been detected. 
+Some examples of anomaly types include {error_types}: apply exactly those names so they can be parsed if you have a 
+similar case or create a new one if you cannot find a match
+
+Example of expected output:
 ### **OUTPUT**
 Table A | Col A | NULLs | 0 | 10 | 14 | Critical
 Table B | Col A & Col B | Correlation | 54% | 13% | 30 | Critical
@@ -63,7 +77,6 @@ system prompt needing more accurate details or better guidance, or any other sug
 
 # The system prompt holds the instructions, so the user message only has to start the run.
 prompt_agent = "Investigate the database and report what you find."
-
 
 def _read_agent_logs() -> dict:
     with open(AGENT_LOG_DIR, "r") as f:
@@ -93,8 +106,13 @@ def clean_agent_logs(**params) -> None:
 def _append_agent_log(run_number: int, **params) -> None:
     d_logs = _read_agent_logs()
 
+    # Adding an identifier to help reconciling with the injected errors
+    id_number = find_latest_id(d_logs["investigation"])
+    params["id"] = id_number
+
     # Appending
     d_logs["investigation"].append({
+        "id": id_number,
         "run_number": run_number,
         "datetime_entered_utc": datetime.now(timezone.utc).isoformat(),
         "params": params,
@@ -118,18 +136,28 @@ def run_agent_investigation(run_number: int = 1):
     # Saving each outcome of the investigation into an agent log file
     for block in response.content:
         if block.type == "text" and "**OUTPUT**" in block.text:
-            agent_logs = block.text.split("**OUTPUT**")[1].strip().split("\n")
+
+            feedback_log = ""
+
+            if "### **FEEDBACK**" in block.text:
+                agent_logs, feedback_log = block.text.split("### **FEEDBACK**")
+                agent_logs = agent_logs.split("**OUTPUT**")[1].strip().split("\n")
+                feedback_log = feedback_log.strip().split("\n")
+            else:
+                agent_logs = block.text.split("**OUTPUT**")[1].strip().split("\n")
+
             for a_log in agent_logs:
                 # format_output as per defined in the prompt to the agent.
                 # This will need to be changed if the prompt format changes.
                 format_output = [l.strip() for l in a_log.split("|")]
                 dict_output = {
-                    "Table": format_output[0],
-                    "Column": format_output[1],
-                    "Metric": format_output[2],
-                    "Calibration": format_output[3],
-                    "Current": format_output[4],
-                    "Severity": format_output[5]
+                    "table": format_output[0],
+                    "column": format_output[1],
+                    "anomaly": format_output[2],
+                    "calibration": format_output[3],
+                    "current": format_output[4],
+                    "nb_rows_affected": format_output[5],
+                    "severity": format_output[6]
                 }
                 _append_agent_log(run_number=run_number, **dict_output)
     return None

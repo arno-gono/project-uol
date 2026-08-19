@@ -70,7 +70,7 @@ def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame,
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "former_datatype": current_datatype,
         "new_datatype": new_datatype,
         "threshold_datatype": round(threshold_datatype, 4),
@@ -109,9 +109,9 @@ def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "threshold_nulls": threshold_nulls,
-        "nb_nulls_injected": nb_nulls_injected,
+        "nb_data_corrupted": nb_nulls_injected,
         "total_nb_rows": len(df),
         "index_row_corrupted": corrupted_rows
     }
@@ -136,7 +136,7 @@ def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[A
     # Keeping params used in injection logs
     params = {
         "threshold_duplicate": threshold_duplicate,
-        "nb_duplicated_rows_inserted": len(df_dups),
+        "nb_data_corrupted": len(df_dups),
         "total_nb_rows_before_dups": len(df) - len(df_dups),
         "index_rows_duplicated": index_to_duplicate,
     }
@@ -158,7 +158,7 @@ def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int 
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "name_new_column": name_new_column,
         "total_nb_rows": len(df)
     }
@@ -234,7 +234,7 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "parent_table": parent_table,
         "parent_column": foreign_keys[col_error]["parent_column"],
         "former_coverage": foreign_keys[col_error]["coverage"],
@@ -285,7 +285,7 @@ def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, d
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "new_label": new_label,
         "known_categories": list(d_calibration["columns_details"][col_error]["cardinality_distribution"]),
         "threshold_category": round(threshold_category, 4),
@@ -335,7 +335,7 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "col_paired": col_paired,
         "calibrated_correlation": d_calibration["correlations"][pair],
         "former_correlation": former_correlation,
@@ -406,15 +406,17 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     former_mean = round(float(df.loc[mask, col_error].mean()), 4)
     former_std = round(float(df.loc[mask, col_error].std()), 4)
 
-    df.loc[mask, col_error] = df.loc[mask, col_error] + directions * shift
+    shifted_values = df.loc[mask, col_error] + directions * shift
 
     # Casting result as integer if datatype is integer
     if d_calibration["columns_details"][col_error]["datatype"] == "int":
-        df.loc[mask, col_error] = df.loc[mask, col_error].apply(lambda x: int(x))
+        shifted_values = [round(n) for n in shifted_values]
+
+    df.loc[mask, col_error] = shifted_values
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "calibrated_mean": values_distribution["mean"],
         "calibrated_std": values_distribution["std"],
         "calibrated_min": values_distribution["min"],
@@ -476,7 +478,7 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[Dat
 
     # Keeping params used in injection logs
     params = {
-        "col_error": col_error,
+        "column": col_error,
         "threshold_duplicate_key": round(threshold_duplicate_key, 4),
         "nb_data_corrupted": nb_data_corrupted,
         "nb_unique_keys_before": nb_unique_keys_before,
@@ -488,24 +490,24 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[Dat
     return df, params
 
 
+ERROR_TYPES_DICT = {
+    "wrong_datatype": inject_wrong_datatype,
+    "insert_null": inject_nulls,
+    "duplicate_rows": inject_duplicate_rows,
+    "insert_column": inject_new_column,
+    "orphan_foreign_key": inject_orphan_foreign_key,
+    "new_category": inject_new_category,
+    "correlation_break": inject_correlation_break,
+    "duplicate_primary_key": inject_duplicate_primary_key,
+    "distribution_shift": inject_distribution_shift,
+}
+
 class ErrorInjectionsModels:
     def __init__(self):
 
         self.df = None
         self.table_name = None
         self.run_number = None
-
-        self.error_types_dict = {
-            "wrong_datatype": inject_wrong_datatype,
-            "insert_null": inject_nulls,
-            "duplicate_rows": inject_duplicate_rows,
-            "insert_column": inject_new_column,
-            "orphan_foreign_key": inject_orphan_foreign_key,
-            "new_category": inject_new_category,
-            "correlation_break": inject_correlation_break,
-            "duplicate_primary_key": inject_duplicate_primary_key,
-            "distribution_shift": inject_distribution_shift,
-        }
 
     def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
         self.df = df_test.copy()
@@ -516,12 +518,12 @@ class ErrorInjectionsModels:
         nb_error = random.randint(0, 5)
 
         # Randomly choose the type of errors that will be injected
-        all_errors = random.choices(list(self.error_types_dict.keys()), k=nb_error)
+        all_errors = random.choices(list(ERROR_TYPES_DICT.keys()), k=nb_error)
         print(f"Running {nb_error} errors in {table_name}. Errors: {all_errors}")
 
         # Injecting errors in the table
         for error_name in all_errors:
-            func_error = self.error_types_dict[error_name]
+            func_error = ERROR_TYPES_DICT[error_name]
 
             res = None
 
@@ -551,12 +553,25 @@ class ErrorInjectionsModels:
                 df, params = res
                 self.df = df.copy()
 
+                # Dict that will be used to compare what the agent finds out. It should be the same format
+                # TODO: have a class or template for this dict to align the keys
+                dict_rec = {
+                    "table": self.table_name,
+                    "column": params["column"] if "column" in params else "",
+                    "anomaly": error_name,
+                    "calibration": "",
+                    "current": "",
+                    "nb_rows_affected": params["nb_data_corrupted"] if "nb_data_corrupted" in params else "",
+                    "severity": ""
+                }
+
                 # Adding a log of the error injected
                 append_injection_logs(
                     table_name=self.table_name,
                     error_type=error_name,
                     run_number=self.run_number,
-                    params=params
+                    dict_rec=dict_rec,
+                    **params
                 )
 
         return self.df

@@ -106,7 +106,8 @@ def run_multiple_rounds(run_number: int, kaggle_dataset: str = KAGGLE_DATASET_NA
 
 if __name__ == "__main__":
     kaggle_dataset = KAGGLE_DATASET_NAME
-    run_multiple_rounds()
+    run_number = 1
+    run_multiple_rounds(run_number)
 
     conn_agent = connecting_to_sqlite(kaggle_dataset, database_type="agent")
-    print(pd.read_sql("SELECT name, type FROM sqlite_master", conn_agent))
+    # print(pd.read_sql("SELECT name, type FROM sqlite_master", conn_agent))
