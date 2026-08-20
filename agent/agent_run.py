@@ -6,9 +6,10 @@ from errors_injection.injection_logs import find_latest_id
 import json
 
 
-# Importing the types of errors as a reference for the agent. This will be needed to reconcile with the
-# logs for injected errors
-error_types = ", ".join(ERROR_TYPES_DICT.keys())
+# Importing the types of errors and their description so that the agent can point to a label
+# when it identifies an anomaly.
+error_types = "\n".join(f"- {error_name}: {details['description']}"
+                        for error_name, details in ERROR_TYPES_DICT.items())
 
 # Writing a System prompt in order to not add it to the conversation every round of the investigation.
 # Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#give-claude-a-role
@@ -39,7 +40,8 @@ Compare what a _new_data table holds against what the calibration says about its
 A difference between the two is a candidate error.
 
 The new data will most likely slightly drift from the original data: there is no need to report 
-changes that are within limits to a reasonable tolerance. 
+changes that are within limits to a reasonable tolerance. The batch might hold fewer rows than the calibrated 
+table, so weigh a difference against the number of rows it is measured on before reporting it. 
 Report only the anomalies you would rate as Medium, High or Critical.
 
 The calibrated tables might contain a lot of data. Refer to the calibration file rather than selecting all rows
@@ -53,19 +55,20 @@ format:
 
 Table name | Column Name | Anomaly | Calibrated | Current | Number of affected rows | Severity
 
+Example of expected output:
+### **OUTPUT**
+Table A | Col A | insert_null | 0 | 10 | 14 | Critical
+Table B | Col A & Col B | correlation_break | 54% | 13% | 30 | Critical
+Table C | Col C | distribution_shift | 54 | 50 | 72 | High
+
 - "Calibrated" and "Current" column: No need to have details. For example if the calibrated datatype is text and 
 you flag numeric entries, enter "Text values" for Calibrated and "Numeric values" for Current. If this is for a 
 correlation, enter "53.5" for Calibrated directly and "34.5" for Current if this is what you calculate. No need for
 excessive details
-- "Anomaly column: it is the type of anomaly that has been detected. 
-Some examples of anomaly types include {error_types}: apply exactly those names so they can be parsed if you have a 
-similar case or create a new one if you cannot find a match
+- "Anomaly" column: it is the type of anomaly that has been detected. Apply exactly one of the names listed below, 
+so they can be parsed. Only create a new name if none of them describes what you found.
 
-Example of expected output:
-### **OUTPUT**
-Table A | Col A | NULLs | 0 | 10 | 14 | Critical
-Table B | Col A & Col B | Correlation | 54% | 13% | 30 | Critical
-Table C | Col C | Mean | 54 | 50 | 72 | High
+{error_types}
 
 ### **FEEDBACK**
 
@@ -109,6 +112,10 @@ def _append_agent_log(run_number: int, **params) -> None:
     # Adding an identifier to help reconciling with the injected errors
     id_number = find_latest_id(d_logs["investigation"])
     params["id"] = id_number
+
+    # Removing the suffix _new_data so the table matches the calibrated one it was named after
+    if "_new_data" in params["table"]:
+        params["table"] = params["table"].replace("_new_data", "")
 
     # Appending
     d_logs["investigation"].append({

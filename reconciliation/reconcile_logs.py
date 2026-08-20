@@ -53,12 +53,6 @@ def reconcile_agent_vs_injection_logs(run_number: int) -> None:
     for i in errors_found_by_agent:
         print(i)
 
-    '''
-    the agent didnt get that distribution_shift has actually quite a lot of use cases
-    A wrong datatype was included into a categorical column: the agent flagged as invalid_category
-    
-    '''
-
     return None
 
 

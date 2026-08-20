@@ -490,17 +490,51 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[Dat
     return df, params
 
 
+# The description of each error is given to the agent so it can tag an error such as "wrong_datatype" to an anomaly
+# it spotted.
 ERROR_TYPES_DICT = {
-    "wrong_datatype": inject_wrong_datatype,
-    "insert_null": inject_nulls,
-    "duplicate_rows": inject_duplicate_rows,
-    "insert_column": inject_new_column,
-    "orphan_foreign_key": inject_orphan_foreign_key,
-    "new_category": inject_new_category,
-    "correlation_break": inject_correlation_break,
-    "duplicate_primary_key": inject_duplicate_primary_key,
-    "distribution_shift": inject_distribution_shift,
+    "wrong_datatype": {
+        "func": inject_wrong_datatype,
+        "description": "A new datatype appears in a column. There used to be text values and new float values appear "
+                       "for example, or text values appear where it used to be dates."
+    },
+    "insert_null": {
+        "func": inject_nulls,
+        "description": "NULL values appear in a column that never held any."
+    },
+    "duplicate_rows": {
+        "func": inject_duplicate_rows,
+        "description": "A whole row appears several times in the table where there used to be no duplicate rows."
+    },
+    "insert_column": {
+        "func": inject_new_column,
+        "description": "A column the calibration never saw appears in the table."
+    },
+    "orphan_foreign_key": {
+        "func": inject_orphan_foreign_key,
+        "description": "A foreign key points to a parent row that does not exist."
+    },
+    "new_category": {
+        "func": inject_new_category,
+        "description": "A label that was not seen at calibration appears in a categorical column."
+    },
+    "correlation_break": {
+        "func": inject_correlation_break,
+        "description": "The values of a numerical column are shuffled between rows. The distribution and the "
+                       "cardinality of that column do not move, only its correlation with another column changes."
+    },
+    "duplicate_primary_key": {
+        "func": inject_duplicate_primary_key,
+        "description": "A few rows reuse a primary key that another row already holds. The key stops being unique "
+                       "but the rest of the row stays plausible."
+    },
+    "distribution_shift": {
+        "func": inject_distribution_shift,
+        "description": "The values of a numerical column move by a few standard deviations. The mean or the spread "
+                       "might be affected : both cases go under this name."
+    },
 }
+
 
 class ErrorInjectionsModels:
     def __init__(self):
@@ -523,7 +557,7 @@ class ErrorInjectionsModels:
 
         # Injecting errors in the table
         for error_name in all_errors:
-            func_error = ERROR_TYPES_DICT[error_name]
+            func_error = ERROR_TYPES_DICT[error_name]["func"]
 
             res = None
 

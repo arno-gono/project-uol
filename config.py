@@ -44,4 +44,9 @@ MIN_DATETIME_PARSE_RATIO = 0.95
 # Model the agent runs on, and a ceiling in tokens being used (cost control).
 AGENT_MODEL = "claude-haiku-4-5"
 AGENT_MAX_TOKENS = 3_000
+
+# Maximum number of rows a single run_sql call can return (cost control). A tool result stays in the
+# conversation, so a whole table read is sent back to the API in every following round of the investigation.
+AGENT_MAX_ROWS_RETURNED = 100
+
 AGENT_LOG_DIR = LOGS_DIR / "agent_logs.json"

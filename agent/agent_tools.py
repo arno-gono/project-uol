@@ -1,27 +1,7 @@
 import pandas as pd
-from config import KAGGLE_DATASET_NAME
+from config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED
 from data.utils import get_calibration_file_as_dict
 from data.sqlite_connector import connecting_to_sqlite
-
-#  TODO
-"""
-    ### **FEEDBACK**
-    The investigation model works well overall. A few suggestions for improvement:
-    
-    1. **Tool Enhancements**: A dedicated tool to check for unexpected categorical values would be useful - 
-    the current approach requires manual SQL queries to identify invalid categorical values 
-    that weren't in the calibrated set.
-    
-    2. **Cardinality Checking**: It would be helpful to have an automatic check for columns marked as 
-    "potential_primary_key" to verify no duplicates or missing values in new data.
-    
-    3. **Missing Value Tracking**: A summary comparison tool that specifically tracks NULL/missing 
-    value changes would help identify violations faster, especially for columns that previously had no NULLs.
-    
-    4. **Data Type Validation**: Automatic detection when column data types appear to have changed 
-    (e.g., numeric values stored as text strings in OCCUPATION_TYPE).
-
-"""
 
 
 # Available tools for the agent. Format as per Claude's Documentation.
@@ -37,7 +17,9 @@ TOOLS = [
                        "tables with the suffix _new_data are the ones corresponding to new data. A _new_data table "
                        "might be empty if there is no new data. "
                        "In order to optimise costs, try and aggregate data with COUNT, AVG or GROUP BY rather than "
-                       "reading a whole table, especially for the one that has been calibrated. ",
+                       "reading a whole table, especially for the one that has been calibrated. "
+                       f"At most {AGENT_MAX_ROWS_RETURNED} rows are returned, so aggregate rather than expecting to "
+                       "read more than that in one go.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -72,13 +54,17 @@ def run_sql(query: str) -> dict:
     # tool allowing to read the database.
     # Only allowing SELECT clauses to be run
 
+    # The query is wrapped in a subquery below, and the agent tends to add a semicolon.
+    # This results in an error: saving a round for the agent
+    query = query.strip().rstrip(";").strip()
+
     if not query.lower()[:6] == "select":
         return {"error": "only SELECT queries are allowed"}
 
     conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="agent")
 
     try:
-        df = pd.read_sql(f"SELECT * FROM ({query})", conn)
+        df = pd.read_sql(f"SELECT * FROM ({query}) LIMIT {AGENT_MAX_ROWS_RETURNED}", conn)
     except Exception as e:
         # The error is handed back to the agent so it can correct its query and try again.
         print(f"\t\033[91mquery failed: {e}\033[0m")
@@ -101,7 +87,8 @@ def read_calibration(table_name: str) -> dict:
         print(f"\t\033[91merror: {table_name} was not calibrated. Calibrated tables: {list(d_calibration.keys())}\033[0m")
         return {"error": f"{table_name} was not calibrated", "calibrated_tables": list(d_calibration.keys())}
 
-    return d_calibration[table_name]
+    # Testing cost without passing the ml_calibration part of the calibration file.
+    return {key: value for key, value in d_calibration[table_name].items() if key != "ml_calibration"}
 
 
 # The model refers to the tools by their name. Mapping tools names with their function in the following dictionary
