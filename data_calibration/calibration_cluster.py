@@ -1,4 +1,5 @@
 from config import KAGGLE_DATASET_NAME
+from typing import Any
 from data.sqlite_connector import connecting_to_sqlite
 import numpy as np
 import pandas as pd
@@ -10,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 NB_SAMPLES = 10_000
 
 
-def _get_kmeans_profile(df: pd.DataFrame):
+def _get_kmeans_profile(df: pd.DataFrame) -> dict[str, Any]:
 
     # Storing the best score obtained and which K in memory
     best_score = -1
@@ -71,7 +72,7 @@ def _get_kmeans_profile(df: pd.DataFrame):
             }
 
 
-def _get_disguised_missing_values(df: pd.DataFrame):
+def _get_disguised_missing_values(df: pd.DataFrame) -> dict[str, dict[str, float]]:
 
     # Highlighting disguised missing values ie numerical placeholders that act as NULL.
     # Using Tukey's Fence method, a statistical approach to isolate outliers, but with more conservative parameters
@@ -120,7 +121,7 @@ def _get_disguised_missing_values(df: pd.DataFrame):
     return suspects
 
 
-def _get_pca_profile(df: pd.DataFrame):
+def _get_pca_profile(df: pd.DataFrame) -> dict[str, Any]:
     # Dimensionality reduction using Principal Component Analysis (PCA).
     # PCA identifies the axes (principal components) that account for the largest amount of variance
     # in the dataset.
@@ -198,7 +199,7 @@ def _get_pca_profile(df: pd.DataFrame):
     }
 
 
-def get_ml_profile(df: pd.DataFrame, numerical_columns: list):
+def get_ml_profile(df: pd.DataFrame, numerical_columns: list[str]) -> dict[str, Any]:
 
     # Trimming data with numerical columns only
     df = df[numerical_columns]

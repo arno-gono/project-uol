@@ -5,13 +5,13 @@ from data.sqlite_connector import connecting_to_sqlite
 from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS
 
 
-def _download_data_from_kaggle(kaggle_dataset: str):
+def _download_data_from_kaggle(kaggle_dataset: str) -> str:
     # kaggle_dataset has the format "owner_data/dataset_name"
     path = kagglehub.dataset_download(kaggle_dataset)
     return path
 
 
-def _split_raw_table_to_clean_and_test(df: pd.DataFrame):
+def _split_raw_table_to_clean_and_test(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     len_df = len(df)
 
     # only splitting tables that have over min_nb_rows rows to avoid splitting a mapping that might be used in another table
@@ -31,13 +31,15 @@ def _split_raw_table_to_clean_and_test(df: pd.DataFrame):
     return {"df_raw": df, "df_clean": df_clean, "df_test": df_test}
 
 
-def _clean_database():
+def _clean_database() -> None:
     for f in os.listdir(DB_DIR):
         if DB_NAME in f:
             os.remove(f"{DB_DIR}/{f}")
 
+    return None
 
-def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
+
+def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str) -> None:
     # getting a connection to sqlite database (or creating one if it does not exist)
     conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
     conn_test = connecting_to_sqlite(kaggle_dataset, database_type="test")
@@ -76,7 +78,7 @@ def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str):
     return None
 
 
-def _create_sqlite_view(kaggle_dataset: str):
+def _create_sqlite_view(kaggle_dataset: str) -> None:
     conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
 
     # declare the view as a string
@@ -110,7 +112,7 @@ def _create_sqlite_view(kaggle_dataset: str):
     return None
 
 
-def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME):
+def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
 
     # downloading data into a default folder used by Kaggle as csv files,
     # and getting the path where the files are located.
