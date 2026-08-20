@@ -1,6 +1,5 @@
 import json
 from anthropic import Anthropic
-from anthropic.types import Message
 from dotenv import load_dotenv
 from config import AGENT_MODEL, AGENT_MAX_TOKENS
 from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
@@ -10,7 +9,7 @@ from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
 load_dotenv()
 
 
-def ask_agent(user_input: str, system_prompt: str) -> Message:
+def ask_agent(user_input: str, system_prompt: str) -> dict:
     """
         Loop for the agent's investigation, which is a back and forth using Anthropic API.
 
@@ -76,19 +75,23 @@ def ask_agent(user_input: str, system_prompt: str) -> Message:
         # Token usage can be extracted from the response for cost management and efficiency of the model.
         # Tokens for caching are separate and also need to be taken into account.
         # They need to be extracted and aggregated each round as the response does not hold cumulative token.
+        uncached_input_tokens = response.usage.input_tokens
+
+        # Cache tokens start to hit from a specific usage (depending on model). The key might be
+        # missing from the response.
         cache_written = response.usage.cache_creation_input_tokens or 0
         cache_read = response.usage.cache_read_input_tokens or 0
-        input_tokens = response.usage.input_tokens + cache_written + cache_read
+        tokens_sent = uncached_input_tokens + cache_written + cache_read
 
-        total_input_tokens += input_tokens
+        total_input_tokens += uncached_input_tokens
         total_output_tokens += response.usage.output_tokens
         total_cache_written += cache_written
         total_cache_read += cache_read
 
-        print(f"\nRound {round_number}: {input_tokens} tokens sent "
+        print(f"\nRound {round_number}: {tokens_sent} tokens sent "
               f"({cache_read} read from the cache, {cache_written} written to it), "
               f"{response.usage.output_tokens} written back "
-              f"(total so far: {total_input_tokens} in / {total_output_tokens} out). "
+              f"(total so far: {total_input_tokens + total_cache_read + total_cache_written} in / {total_output_tokens} out). "
               f"{len(tool_uses)} tool calls")
 
         # The response content must be added to the conversation ("messages") from now on.
@@ -139,11 +142,23 @@ def ask_agent(user_input: str, system_prompt: str) -> Message:
         messages.append({"role": "user", "content": tool_results})
 
     print(f"\nInvestigation over in {round_number} rounds, "
-          f"{total_input_tokens} tokens sent and {total_output_tokens} written back. "
+          f"{total_input_tokens + total_cache_read + total_cache_written} tokens sent "
+          f"and {total_output_tokens} written back. "
           f"{total_cache_read} tokens were read from the cache and {total_cache_written} written to it\n")
 
-    # Returning the overall response from the conversation
-    return response
+    # Returning the overall response from the conversation + all tokens to calculate the cost of the request's loop
+
+    result = {
+        "response": response,
+        "usage": {
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
+            "total_cache_read": total_cache_read,
+            "total_cache_written": total_cache_written,
+        }
+    }
+
+    return result
 
 
 if __name__ == "__main__":

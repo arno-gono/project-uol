@@ -3,6 +3,7 @@ from config import AGENT_LOG_DIR
 from datetime import datetime, timezone
 from errors_injection.errors_injections_models import ERROR_TYPES_DICT
 from errors_injection.injection_logs import find_latest_id
+from agent.agent_cost_calc import calculate_costs
 import json
 
 
@@ -130,18 +131,10 @@ def _append_agent_log(run_number: int, **params) -> None:
     return None
 
 
-def run_agent_investigation(run_number: int = 1):
-
-    # Cleaning the logs for now - should be in the Automation loop calling this function
-    clean_agent_logs()
-
-    response = ask_agent(user_input=prompt_agent, system_prompt=system_prompt_agent)
-
-    # Printing the result of the investigation
-    print("\n".join(block.text for block in response.content if block.type == "text"))
+def _parse_response_to_log(resp: list) -> None:
 
     # Saving each outcome of the investigation into an agent log file
-    for block in response.content:
+    for block in resp:
         if block.type == "text" and "**OUTPUT**" in block.text:
 
             feedback_log = ""
@@ -167,6 +160,29 @@ def run_agent_investigation(run_number: int = 1):
                     "severity": format_output[6]
                 }
                 _append_agent_log(run_number=run_number, **dict_output)
+
+    return None
+
+
+def run_agent_investigation(run_number: int = 1):
+
+    # Cleaning the logs for now - should be in the Automation loop calling this function
+    clean_agent_logs()
+
+    dict_result = ask_agent(user_input=prompt_agent, system_prompt=system_prompt_agent)
+
+    response = dict_result["response"]
+
+    # Printing the result of the investigation
+    print("\n".join(block.text for block in response.content if block.type == "text"))
+
+    # Calculating cost of the investigation and storing it
+    cost_investigation = calculate_costs(dict_result["usage"])
+    print("Cost investigation: $", round(cost_investigation, 3))
+
+    # Parsing the response from the API and saving to a log
+    _parse_response_to_log(response.content)
+
     return None
 
 

@@ -50,3 +50,5 @@ AGENT_MAX_TOKENS = 3_000
 AGENT_MAX_ROWS_RETURNED = 100
 
 AGENT_LOG_DIR = LOGS_DIR / "agent_logs.json"
+AGENT_USAGE_DIR = LOGS_DIR / "usage.json"
+AGENT_FEEDBACK_DIR = LOGS_DIR / "agent_feedback.json"
