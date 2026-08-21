@@ -1,5 +1,5 @@
 from agent.agent_api import ask_agent
-from config import AGENT_LOG_DIR
+from config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR
 from datetime import datetime, timezone
 from errors_injection.errors_injections_models import ERROR_TYPES_DICT
 from errors_injection.injection_logs import find_latest_id
@@ -82,14 +82,14 @@ system prompt needing more accurate details or better guidance, or any other sug
 # The system prompt holds the instructions, so the user message only has to start the run.
 prompt_agent = "Investigate the database and report what you find."
 
-def _read_agent_logs() -> dict:
-    with open(AGENT_LOG_DIR, "r") as f:
+def _read_agent_logs(log_dir: str) -> dict:
+    with open(log_dir, "r") as f:
         d_logs = json.load(f)
     return d_logs
 
 
-def _save_agent_logs(d_logs: dict) -> None:
-    with open(AGENT_LOG_DIR, "w") as f:
+def _save_agent_logs(d_logs: dict, log_dir: str) -> None:
+    with open(log_dir, "w") as f:
         json.dump(d_logs, f, indent=4, default=str)
     return None
 
@@ -103,12 +103,31 @@ def clean_agent_logs(**params) -> None:
         "investigation": [],
     }
 
-    _save_agent_logs(d_logs=d_logs)
+    _save_agent_logs(d_logs=d_logs, log_dir=AGENT_LOG_DIR)
+    return None
+
+
+def _append_feedback_log(feedback_log: list[str]) -> None:
+    d_logs = _read_agent_logs(AGENT_FEEDBACK_DIR)
+
+    # Adding an identifier to help reconciling with the injected errors
+    id_number = find_latest_id(d_logs["feedback"])
+
+    d_logs["feedback"].append(
+        {
+            "id": id_number,
+            "datetime_created_utc": datetime.now(timezone.utc).isoformat(),
+            "feedback": feedback_log
+        }
+    )
+
+    _save_agent_logs(d_logs=d_logs, log_dir=AGENT_FEEDBACK_DIR)
+
     return None
 
 
 def _append_agent_log(run_number: int, **params) -> None:
-    d_logs = _read_agent_logs()
+    d_logs = _read_agent_logs(AGENT_LOG_DIR)
 
     # Adding an identifier to help reconciling with the injected errors
     id_number = find_latest_id(d_logs["investigation"])
@@ -126,7 +145,7 @@ def _append_agent_log(run_number: int, **params) -> None:
         "params": params,
     })
 
-    _save_agent_logs(d_logs=d_logs)
+    _save_agent_logs(d_logs=d_logs, log_dir=AGENT_LOG_DIR)
 
     return None
 
@@ -137,12 +156,11 @@ def _parse_response_to_log(resp: list) -> None:
     for block in resp:
         if block.type == "text" and "**OUTPUT**" in block.text:
 
-            feedback_log = ""
-
             if "### **FEEDBACK**" in block.text:
                 agent_logs, feedback_log = block.text.split("### **FEEDBACK**")
                 agent_logs = agent_logs.split("**OUTPUT**")[1].strip().split("\n")
-                feedback_log = feedback_log.strip().split("\n")
+                feedback_log = [f.strip() for f in feedback_log.split("\n") if f != ""]
+                _append_feedback_log(feedback_log=feedback_log)
             else:
                 agent_logs = block.text.split("**OUTPUT**")[1].strip().split("\n")
 

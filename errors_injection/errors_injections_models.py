@@ -9,18 +9,25 @@ import pandas as pd
 
 def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[
     str, str | float | int | list[Any] | Any]] | None:
+
     # Inserting another datatype in one column of the test data
     available_datatypes = ["int", "float", "bool", "str", "datetime"]
-
-    # Choosing a threshold for the proportion of data that will be corrupted
-    threshold_datatype = random.random()
-
-    # Starting with picking a random column
-    col_error = random.choice(df.columns)
 
     # Get the calibration file as a dictionary
     d_calibration = get_calibration_file_as_dict()
     d_calibration = d_calibration[table_name]
+
+
+    # The column chosen should not be a primary key, otherwise the agent might detect it as orphan
+    # foreign key
+    target_columns = [col for col in d_calibration["columns_details"]
+                    if d_calibration["columns_details"][col]["potential_primary_key"] == False]
+
+    # Starting with picking a random column
+    col_error = random.choice(target_columns)
+
+    # Choosing a threshold for the proportion of data that will be corrupted
+    threshold_datatype = random.random()
 
     if col_error not in d_calibration["columns_details"]:
         # Case where this function is run on a column that was newly created and is not in the calibration
@@ -620,7 +627,8 @@ ERROR_TYPES_DICT = {
     "duplicate_primary_key": {
         "func": inject_duplicate_primary_key,
         "description": "A few rows reuse a primary key that another row already holds. The key stops being unique "
-                       "but the rest of the row stays plausible."
+                       "but the rest of the row stays plausible. This is a different issue to duplicate_rows where "
+                       "the whole row is a duplicate, not just the primary key."
     },
     "distribution_shift": {
         "func": inject_distribution_shift,
@@ -667,7 +675,7 @@ class ErrorInjectionsModels:
             elif error_name == "insert_null":
                 res = func_error(self.df, self.table_name)
             elif error_name == "duplicate_rows":
-                res = func_error(self.df)
+                res = func_error(self.df, self.table_name)
             elif error_name == "insert_column":
                 res = func_error(self.df)
             elif error_name == "orphan_foreign_key":
