@@ -3,15 +3,9 @@ import numpy as np
 from typing import Any
 from pandas import DataFrame
 from data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
-from data.sqlite_connector import connecting_to_sqlite
 from errors_injection.injection_logs import append_injection_logs
-from config import KAGGLE_DATASET_NAME
 import pandas as pd
 
-
-# TODO
-# Listing corrupted rows: this needs to align with what we have in SQLite. The index register is not the same
-# Delete a column from the table
 
 def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[
     str, str | float | int | list[Any] | Any]] | None:
@@ -408,6 +402,13 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
 
     shifted_values = df.loc[mask, col_error] + directions * shift
 
+    # Values are kept inside the bounds the calibration recorded. Another function specifically focuses on creating
+    # outliers / values outside the historical min / max. Probably valuable for a human agent to have those
+    # scenarios separated.
+    clamped_values = shifted_values.clip(lower=values_distribution["min"], upper=values_distribution["max"])
+    nb_values_clamped = int((clamped_values != shifted_values).sum())
+    shifted_values = clamped_values
+
     # Casting result as integer if datatype is integer
     if d_calibration["columns_details"][col_error]["datatype"] == "int":
         shifted_values = [round(n) for n in shifted_values]
@@ -425,6 +426,7 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
         "mode": mode,
         "direction": int(directions[0]) if mode == "shift" else None,
         "shift_applied": shift,
+        "nb_values_clamped": nb_values_clamped,
         "former_mean": former_mean,
         "new_mean": round(float(df.loc[mask, col_error].mean()), 4),
         "former_std": former_std,
@@ -490,6 +492,98 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[Dat
     return df, params
 
 
+def inject_out_of_range(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+    # Creates values past the minimum / maximum recorded at calibration.
+
+    # Get the calibration file as a dictionary
+    d_calibration = get_calibration_file_as_dict()
+    d_calibration = d_calibration[table_name]
+
+    def _has_bounds(values_distribution: dict[str, Any] | None) -> bool:
+        # Checking if the calibration measured a min and a max.
+        if not values_distribution or "min" not in values_distribution or "max" not in values_distribution:
+            return False
+        return True
+
+    # Numerical columns that are not keys and that the calibration recorded bounds for
+    numerical_columns = [col for col, details in d_calibration["columns_details"].items()
+                         if details["datatype"] in ["int", "float"]
+                         and details["potential_primary_key"] is False
+                         and _has_bounds(details["values_distribution"])
+                         and col in df.columns]
+
+    if not numerical_columns:
+        return None
+
+    # Picking a random column and reading the bounds it is supposed to stay within
+    col_error = random.choice(numerical_columns)
+    values_distribution = d_calibration["columns_details"][col_error]["values_distribution"]
+
+    calibrated_min = values_distribution["min"]
+    calibrated_max = values_distribution["max"]
+
+    # Calculating range width as a reference for the outliers, so that the errors are realistic.
+    range_width = calibrated_max - calibrated_min
+
+    if range_width == 0:
+        range_width = abs(calibrated_max) if calibrated_max else 1
+
+    max_distance = random.uniform(0.01, 0.5) * range_width
+
+    # Values can breach the lower bound, the upper one, or both
+    direction = random.choice(["below_min", "above_max", "both"])
+
+    # Out of range values stay rare: a handful of rows is enough to breach a bound, and keeping the
+    # proportion low leaves the mean and the spread of the column almost untouched.
+    threshold_out_of_range = random.uniform(0.001, 0.05)
+
+    # Creating a mask determining which rows get corrupted. Rows holding no value have nothing to push
+    mask = (np.random.random(len(df)) < threshold_out_of_range) & df[col_error].notna().to_numpy()
+    nb_data_corrupted = int(mask.sum())
+
+    if nb_data_corrupted == 0:
+        return None
+
+    corrupted_rows = list(df.loc[mask].index)
+
+    # Choosing which bound each corrupted row breaches
+    if direction == "both":
+        directions = np.random.choice([-1, 1], size=nb_data_corrupted)
+    else:
+        directions = np.full(nb_data_corrupted, -1 if direction == "below_min" else 1)
+
+    # Each row is pushed past its bound by its own distance. The minimum share of 0.05 keeps every value
+    # strictly outside: a distance of zero would land back exactly on the bound.
+    distances = np.random.uniform(0.05, 1.0, nb_data_corrupted) * max_distance
+    new_values = np.where(directions < 0, calibrated_min - distances, calibrated_max + distances)
+
+    # Casting result as integer if datatype is integer and rounding away from the bound.
+    if d_calibration["columns_details"][col_error]["datatype"] == "int":
+        new_values = [int(np.floor(value)) if d < 0 else int(np.ceil(value))
+                      for value, d in zip(new_values, directions)]
+
+    df.loc[mask, col_error] = new_values
+
+    # Keeping params used in injection logs
+    params = {
+        "column": col_error,
+        "calibrated_min": calibrated_min,
+        "calibrated_max": calibrated_max,
+        "direction": direction,
+        "max_distance_past_bound": round(max_distance, 4),
+        "nb_below_min": int((directions < 0).sum()),
+        "nb_above_max": int((directions > 0).sum()),
+        "new_min": round(float(df[col_error].min()), 4),
+        "new_max": round(float(df[col_error].max()), 4),
+        "threshold_out_of_range": round(threshold_out_of_range, 4),
+        "nb_data_corrupted": nb_data_corrupted,
+        "total_nb_rows": len(df),
+        "index_row_corrupted": corrupted_rows
+    }
+
+    return df, params
+
+
 # The description of each error is given to the agent so it can tag an error such as "wrong_datatype" to an anomaly
 # it spotted.
 ERROR_TYPES_DICT = {
@@ -531,7 +625,13 @@ ERROR_TYPES_DICT = {
     "distribution_shift": {
         "func": inject_distribution_shift,
         "description": "The values of a numerical column move by a few standard deviations. The mean or the spread "
-                       "might be affected : both cases go under this name."
+                       "might be affected : both cases go under this name. Every value stays between the minimum "
+                       "and the maximum seen at calibration."
+    },
+    "out_of_range": {
+        "func": inject_out_of_range,
+        "description": "A few values of a numerical column sit below the minimum or above the maximum seen at "
+                       "calibration. Only those rows move, so the mean and the spread of the column barely change."
     },
 }
 
@@ -580,6 +680,8 @@ class ErrorInjectionsModels:
                 res = func_error(self.df, self.table_name)
             elif error_name == "distribution_shift":
                 res = func_error(self.df, self.table_name)
+            elif error_name == "out_of_range":
+                res = func_error(self.df, self.table_name)
 
             # Checking if the error was actually injected
             if res is not None:
@@ -617,8 +719,8 @@ if __name__ == "__main__":
 
     conn_test = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="test")
 
-    table_name = "application_record"
     table_name = "olist_products_dataset"
+    table_name = "application_record"
     df = pd.read_sql(f"SELECT * FROM {table_name}", conn_test)
     df_raw = df.copy()
 
