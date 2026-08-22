@@ -1,7 +1,8 @@
 import json
 import os
 from typing import Any
-from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB, MIN_DATETIME_PARSE_RATIO
+from config import (KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB, MIN_DATETIME_PARSE_RATIO,
+                    KAGGLE_TABLE_MAX_ROWS)
 from data.sqlite_connector import connecting_to_sqlite
 import pandas as pd
 import numpy as np
@@ -267,30 +268,80 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
 
     # Most analysis on relationship is run on numerical columns.
     # Cramer's V model calculates association between categorical columns.
-    categorical_columns = [col for col, details in dict_metadata["columns_details"].items()
-                           if details["cardinality_distribution"] is not None
-                           and not details["potential_primary_key"]]
-
     dict_metadata["cramers_v_categorical_associations"] = _get_categorical_association_dict(
-        df=df, categorical_cols=categorical_columns)
+        df=df, categorical_cols=_get_categorical_columns(dict_metadata["columns_details"]))
 
-    # Passing only numerical values and non-primary keys
-    numerical_columns = [c for c in dict_metadata["columns_details"]
-                         if dict_metadata["columns_details"][c]["datatype"] in ["int", "float"]
-                         and dict_metadata["columns_details"][c]["potential_primary_key"] is False]
+    # The profiling that runs on numerical columns is added by _add_numerical_profiling once every table has
+    # been through this function, as picking those columns needs the foreign keys of the whole dataset.
+    return dict_metadata
 
-    # Last pairing: the correlation ratio associates a categorical column with a numerical one.
+
+def _get_categorical_columns(columns_details: dict[str, Any]) -> list[str]:
+    # Categorical columns are the ones the cardinality was measured on, keys left aside.
+    return [col_name for col_name, details in columns_details.items()
+            if details["cardinality_distribution"] is not None
+            and not details["potential_primary_key"]]
+
+
+def _get_referenced_primary_keys(dict_metadata: dict[str, Any]) -> dict[str, list[str]]:
+    # Listing every primary key that another table points at through a foreign key, with the table holding it
+    d_referenced_keys = {}
+
+    for table_details in dict_metadata.values():
+
+        # Foreign keys are mapped once every table has been profiled, so the key is not always there yet
+        if "potential_foreign_key" not in table_details:
+            continue
+
+        for foreign_key in table_details["potential_foreign_key"].values():
+            parent_table = foreign_key["parent_table"]
+            parent_column = foreign_key["parent_column"]
+
+            if parent_table in d_referenced_keys:
+                if parent_column not in d_referenced_keys[parent_table]:
+                    d_referenced_keys[parent_table].append(parent_column)
+            else:
+                d_referenced_keys[parent_table] = [parent_column]
+
+    return d_referenced_keys
+
+
+def _get_numerical_columns(table_name: str, dict_metadata: dict[str, Any]) -> list[str]:
+    # Numerical columns that the statistical and the machine learning profiling can be run on.
+    # Excluding columns flagged as potential primary keys and that have been linked to a foreign key in another table.
+    # This is to avoid attributes like longitude or latitude being considered as primary key and then excluded from
+    # being injected errors in.
+    d_referenced_keys = _get_referenced_primary_keys(dict_metadata)
+
+    # Only the keys of this table matter here
+    referenced_columns = d_referenced_keys[table_name] if table_name in d_referenced_keys else []
+
+    return [col_name for col_name, details in dict_metadata[table_name]["columns_details"].items()
+            if details["datatype"] in ["int", "float"]
+            and col_name not in referenced_columns]
+
+
+def _add_numerical_profiling(table_name: str, dict_metadata: dict[str, Any], co: sqlite3.Connection) -> None:
+    # Profiling that depends on the numerical columns, hence run once the foreign keys of the whole dataset
+    # are known. The metadata of the table passed as argument is completed in place.
+    df = pd.read_sql(f'SELECT * FROM "{table_name}"', co)
+
+    categorical_columns = _get_categorical_columns(dict_metadata[table_name]["columns_details"])
+    numerical_columns = _get_numerical_columns(table_name=table_name, dict_metadata=dict_metadata)
+
     # Run on the raw column as a placeholder tied to a single category, ie a disguised missing value,
     # shows up here as a ratio close to 1 and tells the agent which category the placeholder stands for.
-    dict_metadata["categorical_numerical_associations"] = _get_mixed_association_dict(
+    dict_metadata[table_name]["categorical_numerical_associations"] = _get_mixed_association_dict(
         df=df, categorical_cols=categorical_columns, numerical_cols=numerical_columns)
 
     # Machine Learning approach: Dimensionality reduction, Disguised Missing Values and KMeans clusters
     if len(numerical_columns) >= 2:
-        dict_metadata["ml_calibration"] = get_ml_profile(df=df, numerical_columns=numerical_columns)
+        dict_metadata[table_name]["ml_calibration"] = get_ml_profile(df=df, numerical_columns=numerical_columns)
     else:
-        dict_metadata["ml_calibration"] = f"Not enough numerical columns to run ML profiling ({len(numerical_columns)} column)"
-    return dict_metadata
+        dict_metadata[table_name]["ml_calibration"] = (
+            f"Not enough numerical columns to run ML profiling ({len(numerical_columns)} column)")
+
+    return None
 
 
 def _get_primary_key_columns(dict_metadata: dict[str, Any]) -> dict[str, list[str]]:
@@ -321,30 +372,42 @@ def _get_fk_coverage(child_series: pd.Series, parent_series: pd.Series) -> float
 def _get_foreign_keys_dict(table_name: str, dict_metadata: dict[str, Any], co_clean: sqlite3.Connection,
                            co_test: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     # A column is a candidate foreign key when the values of this column are actually found in the parent key column.
+    # Only the values decide: the child column and the parent key do not have to carry the same name, but if all
+    # values of the child column are included in the parent column (within threshold) then it is considered as a
+    # potential foreign key.
     d_primary_keys = _get_primary_key_columns(dict_metadata)
+
+    # Flattening the primary keys into (parent table, parent column) pairs. Every column of the profiled table is
+    # compared against every primary key held by another table.
+    parent_keys = [(parent_table, parent_column)
+                   for parent_column, parent_tables in d_primary_keys.items()
+                   for parent_table in parent_tables
+                   if parent_table != table_name]
+
+    if not parent_keys:
+        return {}
 
     d_foreign_keys = {}
 
     # Minimum share of a column's values that must be found in the parent key for the pair to be recorded as a
-    # foreign key
-    min_foreign_key_coverage = 0.9
+    # foreign key. The data is truncated (KAGGLE_TABLE_MAX_ROWS) so a tolerance is accepted, for tests purposes.
+    min_foreign_key_coverage = 0.95 if KAGGLE_TABLE_MAX_ROWS else 1
+
+    # The same parent key is compared against every column of the table. Reading it from SQLite once and keeping
+    # it in memory, as the comparison is now run on all the pairs instead of the ones sharing a column name.
+    parent_series_cache = {}
 
     for col_name in dict_metadata[table_name]["columns_details"]:
-
-        # Only keeping the parents that are in another table than the one being profiled
-        parent_tables = []
-
-        if col_name in d_primary_keys:
-            parent_tables = [t for t in d_primary_keys[col_name] if t != table_name]
-
-        if not parent_tables:
-            continue
-
         child_series = read_column_from_whole_dataset(table_name, col_name, co_clean, co_test)
 
-        for parent_table in parent_tables:
-            parent_series = read_column_from_whole_dataset(parent_table, col_name, co_clean, co_test)
-            coverage = _get_fk_coverage(child_series=child_series, parent_series=parent_series)
+        for parent_table, parent_column in parent_keys:
+
+            if (parent_table, parent_column) not in parent_series_cache:
+                parent_series_cache[(parent_table, parent_column)] = read_column_from_whole_dataset(
+                    parent_table, parent_column, co_clean, co_test)
+
+            coverage = _get_fk_coverage(child_series=child_series,
+                                        parent_series=parent_series_cache[(parent_table, parent_column)])
 
             if coverage < min_foreign_key_coverage:
                 continue
@@ -356,7 +419,7 @@ def _get_foreign_keys_dict(table_name: str, dict_metadata: dict[str, Any], co_cl
             # Keeping a relationship foreign to primary key mapping in the calibration.
             d_foreign_keys[col_name] = {
                 "parent_table": parent_table,
-                "parent_column": col_name,
+                "parent_column": parent_column,
                 "coverage": coverage,
             }
 
@@ -389,6 +452,12 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
         dict_metadata[table_name]["potential_foreign_key"] = _get_foreign_keys_dict(
             table_name=table_name, dict_metadata=dict_metadata, co_clean=conn, co_test=conn_test)
 
+    # The profiling running on numerical columns comes last: a key another table points at is left out of those
+    # columns, which is only known once every foreign key of the dataset has been mapped.
+    for table_name in dict_metadata:
+        print(f"Profiling numerical columns of {table_name}")
+        _add_numerical_profiling(table_name=table_name, dict_metadata=dict_metadata, co=conn)
+
     conn.close()
     conn_test.close()
 
@@ -404,7 +473,9 @@ def _round_floats(data: Any, nb_decimals: int = 4) -> Any:
         return float(round(data, nb_decimals))
 
     if isinstance(data, dict):
-        return {k: _round_floats(v, nb_decimals) for k, v in data.items()}
+        # Error with timestamp that could not be written in JSON. Default casting to strings.
+        return {(k if isinstance(k, (str, int, float, bool)) or k is None else str(k)): _round_floats(v, nb_decimals)
+                for k, v in data.items()}
 
     if isinstance(data, list):
         return [_round_floats(v, nb_decimals) for v in data]
@@ -435,7 +506,7 @@ def dataset_calibration() -> dict[str, Any]:
 if __name__ == "__main__":
     # d_metadata = dataset_calibration()
 
-    table_name = "application_record"
     table_name = "olist_orders_dataset"
+    table_name = "application_record"
     kaggle_dataset = KAGGLE_DATASET_NAME
     # co = connecting_to_sqlite(kaggle_dataset, database_type="clean")

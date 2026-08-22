@@ -11,7 +11,7 @@ def main():
     calibration = dataset_calibration()
 
     # Automation loop: running loops of errors randomly injected into a dataset and calling an agent investigation
-    nb_runs = 1
+    nb_runs = 10
 
     for run_number in range(1, nb_runs + 1):
         # Generating errors and injecting them in the test dataset

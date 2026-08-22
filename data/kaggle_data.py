@@ -2,7 +2,7 @@ import kagglehub
 import pandas as pd
 import os
 from data.sqlite_connector import connecting_to_sqlite
-from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS
+from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS, DATA_CLEAN_TEST_SPLIT
 
 
 def _download_data_from_kaggle(kaggle_dataset: str) -> str:
@@ -18,8 +18,7 @@ def _split_raw_table_to_clean_and_test(df: pd.DataFrame) -> dict[str, pd.DataFra
     min_nb_rows = 0
 
     # Split choice: Y% of the data is kept in the clean vs the test table
-    split_percent = 0.95
-    nb_row_split = int(len_df * split_percent)
+    nb_row_split = int(len_df * DATA_CLEAN_TEST_SPLIT)
 
     if len(df) < min_nb_rows:
         return {"df_raw": df}
@@ -46,8 +45,13 @@ def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str) -> None:
 
     # looping through the csv files from Kaggle and uploading to sqlite
     for file in os.listdir(path_kaggle_data):
-        # reading csv file as a dataframe
+        # Reading csv file as a dataframe
         df = pd.read_csv(f"{path_kaggle_data}/{file}")
+
+        # Exception for airbnb dataset: trimming the columns of listings (tests_purposes)
+        if kaggle_dataset == "airbnb/seattle" and file == "listings.csv":
+            df = df[["id", "scrape_id", "last_scraped", "name", "description", "medium_url", "host_id", "host_name",
+                     "host_since", "latitude", "longitude", "accommodates", "price", "weekly_price", "guests_included"]]
 
         if KAGGLE_TABLE_MAX_ROWS is not None:
             df = df.head(KAGGLE_TABLE_MAX_ROWS)
@@ -132,13 +136,13 @@ def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME) 
 
 if __name__ == "__main__":
     # open a connection
-    conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
+    # conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
     kaggle_dataset = KAGGLE_DATASET_NAME
-
-    download_kaggle_upload_to_sqlite(KAGGLE_DATASET_NAME)
-
-    # check existing tables
-    print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
+    #
+    # download_kaggle_upload_to_sqlite(KAGGLE_DATASET_NAME)
+    #
+    # # check existing tables
+    # print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
 
     # _create_sqlite_view(KAGGLE_DATASET_NAME)
 
@@ -146,7 +150,7 @@ if __name__ == "__main__":
     # table_name = "v_test_table"
     # df = pd.read_sql(f"SELECT * FROM {table_name} LIMIT 10", conn)
 
-    conn.close()
+    # conn.close()
 
 
 

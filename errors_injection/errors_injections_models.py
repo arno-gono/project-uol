@@ -2,6 +2,8 @@ import random
 import numpy as np
 from typing import Any
 from pandas import DataFrame
+from config import KAGGLE_DATASET_NAME
+from data.sqlite_connector import connecting_to_sqlite
 from data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
 from errors_injection.injection_logs import append_injection_logs
 import pandas as pd
@@ -139,7 +141,7 @@ def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[A
         "threshold_duplicate": threshold_duplicate,
         "nb_data_corrupted": len(df_dups),
         "total_nb_rows_before_dups": len(df) - len(df_dups),
-        "index_rows_duplicated": index_to_duplicate,
+        "index_row_corrupted": index_to_duplicate,
     }
 
     return df, params
@@ -217,7 +219,7 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
             return "".join(chars)
 
         # Inserting a random character into a random location
-        random_loc = random.choice(range(len(fkey)))
+        random_loc = random.choice(range(len(str(fkey))))
         random_char = random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
         random_char = random_char.upper() if random.choice(["upper", "lower"]) == "upper" else random_char
         return fkey[:random_loc] + random_char + fkey[random_loc:]
@@ -675,7 +677,7 @@ class ErrorInjectionsModels:
             elif error_name == "insert_null":
                 res = func_error(self.df, self.table_name)
             elif error_name == "duplicate_rows":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df)
             elif error_name == "insert_column":
                 res = func_error(self.df)
             elif error_name == "orphan_foreign_key":
@@ -709,6 +711,10 @@ class ErrorInjectionsModels:
                     "severity": ""
                 }
 
+                # Removing index_row_corrupted from the params for now as not being checked for
+                if "index_row_corrupted" in params:
+                    params.pop("index_row_corrupted")
+
                 # Adding a log of the error injected
                 append_injection_logs(
                     table_name=self.table_name,
@@ -722,9 +728,6 @@ class ErrorInjectionsModels:
 
 
 if __name__ == "__main__":
-    from data.sqlite_connector import connecting_to_sqlite
-    from config import KAGGLE_DATASET_NAME
-
     conn_test = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="test")
 
     table_name = "olist_products_dataset"

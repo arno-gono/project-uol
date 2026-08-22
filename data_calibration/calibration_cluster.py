@@ -33,12 +33,19 @@ def _get_kmeans_profile(df: pd.DataFrame) -> dict[str, Any]:
     # when the best score was achieved at least 5 runs before and the model performs worse and worse
     k = 2
     while k < best_k + 5 or k <= 20:
-        # Instantiating the model
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-        labels = kmeans.fit_predict(scaled)
+        try:
+            # Instantiating the model
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(scaled)
 
-        # Scoring the model: -1 to 1, higher is better
-        score = silhouette_score(scaled, labels)
+            # Scoring the model: -1 to 1, higher is better
+            score = silhouette_score(scaled, labels)
+
+        except ValueError:
+            # A given k can be impossible to fit or to score, typically when the data holds fewer points than
+            # the number of clusters asked for. Moving on to the next k rather than stopping the calibration.
+            k += 1
+            continue
 
         # Saving scores per k:
         scores_per_k[f"K_{k}"] = round(float(score), 4)
@@ -50,6 +57,10 @@ def _get_kmeans_profile(df: pd.DataFrame) -> dict[str, Any]:
             best_kmeans = kmeans
 
         k += 1
+
+    # Every k can be skipped, leaving no model to profile
+    if best_kmeans is None:
+        return {"best_score": None, "best_k": None, "clusters": [], "scores_per_k": scores_per_k}
 
     # Transforming centroids values back to original scales
     centroids = scaler.inverse_transform(best_kmeans.cluster_centers_)
@@ -100,6 +111,11 @@ def _get_disguised_missing_values(df: pd.DataFrame) -> dict[str, dict[str, float
         q1 = other_values.quantile(0.25)
         q3 = other_values.quantile(0.75)
         iqr = q3 - q1
+
+        # Handling distribution cases that results in an iqr equal to 0.
+        if iqr == 0:
+            continue
+
         lower_fence = q1 - param_tukeys_fence_iqr_multiplier * iqr
         upper_fence = q3 + param_tukeys_fence_iqr_multiplier * iqr
 

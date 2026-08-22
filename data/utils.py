@@ -23,7 +23,7 @@ def get_calibration_file_path() -> str:
 
 def read_column_from_whole_dataset(table_name: str, col_name: str, co_clean: sqlite3.Connection,
                                     co_test: sqlite3.Connection) -> pd.Series:
-    # Some Primary keys might be split from the clean dataset when migrating Kaggle data to SQLite,
+    # Some primary keys might be split from the clean dataset when migrating Kaggle data to SQLite,
     # preventing from mapping the Foreign Keys accurately. Reading both clean and test data together.
     df_clean = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_clean)
     df_test = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_test)

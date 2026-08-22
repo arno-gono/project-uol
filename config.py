@@ -1,15 +1,17 @@
 from pathlib import Path
 
 
-KAGGLE_DATASET_NAME = "rikdifos/credit-card-approval-prediction"
+KAGGLE_DATASET_NAME = "airbnb/seattle"
 # other dataset to try:
 # olistbr/brazilian-ecommerce
 # shrinivasv/retail-store-star-schema-dataset
 # rikdifos/credit-card-approval-prediction
+# airbnb/seattle
 
 # Managing API cost for iterating purposes. cutting all tables to a max of KAGGLE_TABLE_MAX_ROWS
 # Use None to uncap
-KAGGLE_TABLE_MAX_ROWS = 1_000
+KAGGLE_TABLE_MAX_ROWS = None
+DATA_CLEAN_TEST_SPLIT = 0.97
 
 # All db files are stored within a specific folder, anchored to this file so that
 # the path is the same no matter which directory the script is run from
