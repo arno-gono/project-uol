@@ -1,6 +1,7 @@
 from data.kaggle_data import download_kaggle_upload_to_sqlite
 from data_calibration.calibration_1st_layer import dataset_calibration
 from errors_injection.random_injection_runner import run_multiple_rounds
+from agent.agent_run import run_agent_investigation
 
 def main():
 

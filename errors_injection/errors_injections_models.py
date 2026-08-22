@@ -695,6 +695,19 @@ class ErrorInjectionsModels:
         self.table_name = None
         self.run_number = None
 
+        # Some errors injected per table can only be inserted once (for example duplicate_rows cannot be run
+        # several times in a row). Otherwise, the agent would never be able to know that the duplicated rows were
+        # inserted in 1 or N rounds. Building a memory of what was injected.
+        self.unique_errors_per_table = ["duplicate_rows"]
+        self.errors_injected = []
+
+        # A column can only be injected an error in once, otherwise it cannot be reconciled with the agent.
+        # In a production environment, if there would be 2 errors in a column, the agent would probably be able to
+        # find it if it can find one error. For test purposes, eliminating potential conflicts and reconciliation
+        # difficulties.
+        self.columns_already_affected = []
+
+
     def run_errors(self, df_test: pd.DataFrame, table_name: str, run_number: int) -> pd.DataFrame:
         self.df = df_test.copy()
         self.table_name = table_name
@@ -707,39 +720,66 @@ class ErrorInjectionsModels:
         all_errors = random.choices(list(ERROR_TYPES_DICT.keys()), k=nb_error)
         print(f"Running {nb_error} errors in {table_name}. Errors: {all_errors}")
 
+        # Reinitialising the attributes
+        self.errors_injected = []
+        self.columns_already_affected = []
+
         # Injecting errors in the table
         for error_name in all_errors:
+
+            # Some errors cannot be run twice on the same table (like duplicate_rows), otherwise the agent would
+            # not be able to flag properly.
+            if error_name in self.errors_injected and error_name in self.unique_errors_per_table:
+                continue
+
             func_error = ERROR_TYPES_DICT[error_name]["func"]
 
             res = None
 
+            # A copy is passed to the injection function: it corrupts the dataframe it receives, so the round
+            # only keeps the result once the error has passed the checks below.
             # Attributing the correct arguments per function
             if error_name == "wrong_datatype":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "insert_null":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "duplicate_rows":
-                res = func_error(self.df)
+                res = func_error(self.df.copy())
             elif error_name == "insert_column":
-                res = func_error(self.df)
+                res = func_error(self.df.copy())
             elif error_name == "orphan_foreign_key":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "new_category":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "correlation_break":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "duplicate_primary_key":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "distribution_shift":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
             elif error_name == "out_of_range":
-                res = func_error(self.df, self.table_name)
+                res = func_error(self.df.copy(), self.table_name)
 
             # Checking if the error was actually injected
             if res is not None:
-                print(f"\tError {error_name} was injected. Creating Log")
+
                 df, params = res
-                self.df = df.copy()
+
+                # Checking that the column has not been corrupted already. If it has, the error is not injected.
+                if "column" in params and params["column"] in self.columns_already_affected:
+                    continue
+                elif "column" in params:
+                    # Storing the corrupted column to avoid error conflicts.
+                    self.columns_already_affected.append(params["column"])
+
+                # Storing the corrupted injected error to avoid error conflicts.
+                self.errors_injected.append(error_name)
+
+                print(f"\tError {error_name} was injected in {table_name}. Creating Log")
+
+                # The error is validated: overwriting the df that will be returned to the caller
+                # and saved for the agent.
+                self.df = df
 
                 # Dict that will be used to compare what the agent finds out. It should be the same format
                 # TODO: have a class or template for this dict to align the keys
