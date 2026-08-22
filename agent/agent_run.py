@@ -1,4 +1,5 @@
 from agent.agent_api import ask_agent
+from typing import Any
 from config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR
 from datetime import datetime, timezone
 from errors_injection.errors_injections_models import ERROR_TYPES_DICT
@@ -82,19 +83,19 @@ system prompt needing more accurate details or better guidance, or any other sug
 # The system prompt holds the instructions, so the user message only has to start the run.
 prompt_agent = "Investigate the database and report what you find."
 
-def _read_agent_logs(log_dir: str) -> dict:
+def _read_agent_logs(log_dir: str) -> dict[str, Any]:
     with open(log_dir, "r") as f:
         d_logs = json.load(f)
     return d_logs
 
 
-def _save_agent_logs(d_logs: dict, log_dir: str) -> None:
+def _save_agent_logs(d_logs: dict[str, Any], log_dir: str) -> None:
     with open(log_dir, "w") as f:
         json.dump(d_logs, f, indent=4, default=str)
     return None
 
 
-def clean_agent_logs(**params) -> None:
+def clean_agent_logs(**params: Any) -> None:
     # The file needs to be cleaned for each new run, and potentially created for all first usage
     # Saving an empty dict as an easy way to reset the file
     d_logs = {
@@ -126,7 +127,7 @@ def _append_feedback_log(feedback_log: list[str]) -> None:
     return None
 
 
-def _append_agent_log(run_number: int, **params) -> None:
+def _append_agent_log(run_number: int, **params: Any) -> None:
     d_logs = _read_agent_logs(AGENT_LOG_DIR)
 
     # Adding an identifier to help reconciling with the injected errors
@@ -150,7 +151,7 @@ def _append_agent_log(run_number: int, **params) -> None:
     return None
 
 
-def _parse_response_to_log(resp: list) -> None:
+def _parse_response_to_log(resp: list[Any]) -> None:
 
     # Saving each outcome of the investigation into an agent log file
     for block in resp:
@@ -182,7 +183,7 @@ def _parse_response_to_log(resp: list) -> None:
     return None
 
 
-def run_agent_investigation(run_number: int = 1):
+def run_agent_investigation(run_number: int = 1) -> None:
 
     # Cleaning the logs for now - should be in the Automation loop calling this function
     clean_agent_logs()

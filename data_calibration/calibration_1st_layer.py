@@ -222,7 +222,7 @@ def _is_null_allowed(pd_series: pd.Series) -> bool:
         return False
 
 
-def _get_distribution_for_numerical_fields(col_name, df: pd.DataFrame) -> dict[Any, Any] | None:
+def _get_distribution_for_numerical_fields(col_name: str, df: pd.DataFrame) -> dict[Any, Any] | None:
     if col_name in df.columns:
         return df[col_name].dropna().to_dict()
 
@@ -395,7 +395,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
     return dict_metadata
 
 
-def _round_floats(data, nb_decimals: int = 4):
+def _round_floats(data: Any, nb_decimals: int = 4) -> Any:
     # Rounding all numbers to a maximum of nb_decimals. Storing data with 10+ floating decimals which
     # are passed on to the agent for every single request to the API. Trimming float numbers lightens the size
     # of the calibration file, and therefore the cost for the investigations.
@@ -412,7 +412,7 @@ def _round_floats(data, nb_decimals: int = 4):
     return data
 
 
-def _save_metadata(dict_data: dict, dataset_name: str = DB_NAME):
+def _save_metadata(dict_data: dict[str, Any], dataset_name: str = DB_NAME) -> None:
     # Saving data under the name of the dataset name
     path_json_file = os.path.join(DB_DIR, f"{dataset_name}.json")
 
@@ -422,7 +422,7 @@ def _save_metadata(dict_data: dict, dataset_name: str = DB_NAME):
     return None
 
 
-def dataset_calibration():
+def dataset_calibration() -> dict[str, Any]:
     # Full analysis of each table of the dataset
     dict_metadata = _aggregate_metadata()
 
