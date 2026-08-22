@@ -20,6 +20,7 @@ def clean_injection_logs(**params) -> None:
         "datetime_created_utc": datetime.now(timezone.utc).isoformat(),
         "params": params,
         "injections": [],
+        "failed_injections": [],
     }
 
     _save_injection_logs(d_logs=d_logs)
@@ -65,6 +66,26 @@ def append_injection_logs(table_name: str, error_type: str, run_number: int, dic
 
     _save_injection_logs(d_logs=d_logs)
     return None
+
+
+def append_failed_injection_logs(table_name: str, error_type: str, error_message: str) -> None:
+    # Kept apart from the injections: nothing was written in the table, so the agent cannot be asked to find it.
+    d_logs = _read_injection_logs()
+
+    # A log file written before this list existed does not hold the key yet
+    if "failed_injections" not in d_logs:
+        d_logs["failed_injections"] = []
+
+    d_logs["failed_injections"].append({
+        "table_name": table_name,
+        "error_type": error_type,
+        "datetime_entered_utc": datetime.now(timezone.utc).isoformat(),
+        "error_message": error_message,
+    })
+
+    _save_injection_logs(d_logs=d_logs)
+    return None
+
 
 if __name__ == "__main__":
     # append_injection_logs(table_name='test_table', error_type='error', run_number=2, hi="test", threshold=0.22)

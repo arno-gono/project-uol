@@ -6,9 +6,11 @@ from config import KAGGLE_DATASET_NAME
 from data.sqlite_connector import connecting_to_sqlite
 from data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
 from errors_injection.injection_logs import append_injection_logs
+from errors_injection.utils import skip_failed_injection
 import pandas as pd
 
 
+@skip_failed_injection
 def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[
     str, str | float | int | list[Any] | Any]] | None:
 
@@ -84,6 +86,7 @@ def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame,
     return df, params
 
 
+@skip_failed_injection
 def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, float | Any]]:
 
     # Get the calibration file as a dictionary
@@ -122,6 +125,7 @@ def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str
     return df, params
 
 
+@skip_failed_injection
 def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[Any] | float]]:
     # Choosing a random number of rows that will be duplicated
     threshold_duplicate = random.random()
@@ -147,6 +151,7 @@ def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[A
     return df, params
 
 
+@skip_failed_injection
 def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int | Any]] | None:
     # Choosing a random column
     col_error = random.choice(df.columns)
@@ -178,6 +183,7 @@ def _get_primary_keys(table_name: str, col_name: str) -> set:
     return set(col_values)
 
 
+@skip_failed_injection
 def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Breaking a foreign key: the key points to a parent that does not exist.
 
@@ -208,31 +214,62 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     corrupted_rows = list(df.loc[mask].index)
 
     # Building random foreign keys
-    def _generate_random_fkey(fkey: str) -> str:
+    def _generate_random_fkey(fkey: Any) -> Any:
+        # Ensuring fkey is cast as string - some primary / foreign keys are numerical
+        key_as_text = str(fkey)
+        chars = list(key_as_text)
 
-        # Two cases: swapping 2 chars, or inserting one.
-        if random.random() < 0.5:
-            # Swapping 2 characters
-            i, j = random.sample(range(len(fkey)), 2)
-            chars = list(fkey)
+        # Checking available characters and position depending on the fkey datatype.
+        if isinstance(fkey, str):
+            available_chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+            available_positions = list(range(len(chars)))
+        else:
+            available_chars = "0123456789"
+            available_positions = [i for i, char in enumerate(chars) if char.isdigit()]
+
+        # Two cases: swapping 2 characters, or inserting one. A key offering a single position has nothing
+        # to be swapped with, so it can only be lengthened.
+        if random.random() < 0.5 and len(available_positions) > 1:
+            i, j = random.sample(available_positions, 2)
             chars[i], chars[j] = chars[j], chars[i]
-            return "".join(chars)
+        else:
+            random_loc = random.choice(available_positions)
+            random_char = random.choice(available_chars)
+            random_char = random_char.upper() if random.choice(["upper", "lower"]) == "upper" else random_char
+            chars.insert(random_loc, random_char)
 
-        # Inserting a random character into a random location
-        random_loc = random.choice(range(len(str(fkey))))
-        random_char = random.choice("0123456789abcdefghijklmnopqrstuvwxyz")
-        random_char = random_char.upper() if random.choice(["upper", "lower"]) == "upper" else random_char
-        return fkey[:random_loc] + random_char + fkey[random_loc:]
+        new_fkey = "".join(chars)
+
+        # Ensuring the function returns the same datatype as the argument it received.
+        if isinstance(fkey, str):
+            return new_fkey
+
+        if isinstance(fkey, (int, np.integer)):
+            return int(new_fkey)
+
+        if isinstance(fkey, (float, np.floating)):
+            return float(new_fkey)
+
+        # Any other datatype is rebuilt from the class of the key itself
+        return type(fkey)(new_fkey)
 
 
-    def _get_corrupted_fkey(fkey: str) -> str:
+    def _get_corrupted_fkey(fkey: Any) -> Any:
         new_fkey = _generate_random_fkey(fkey)
+
         while new_fkey in primary_keys or new_fkey == fkey:
             new_fkey = _generate_random_fkey(fkey)
+
         return new_fkey
 
     # The same key always maps to the same corrupted one, so a key repeated in the table stays repeated
-    new_values_dict = {fkey: _get_corrupted_fkey(fkey) for fkey in set(df.loc[mask, col_error])}
+    try:
+        new_values_dict = {fkey: _get_corrupted_fkey(fkey) for fkey in set(df.loc[mask, col_error])}
+    except:
+        # Some datatypes cannot be rebuilt from their text form once a character moved, a timestamp for
+        # example. Leaving the column alone rather than writing a value it cannot hold.
+        return None
+
     df.loc[mask, col_error] = df.loc[mask, col_error].map(new_values_dict)
 
     # Keeping params used in injection logs
@@ -251,6 +288,7 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     return df, params
 
 
+@skip_failed_injection
 def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Inserting a category that was not seen at calibration time, impacting cardinality distribution.
     available_labels = ["UNKNOWN", "N/A", "-99999", "TO_BE_DEFINED", "OTHER", "Not available", "Not applicable"]
@@ -300,6 +338,7 @@ def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, d
     return df, params
 
 
+@skip_failed_injection
 def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Shuffling the values of one column that has high correlation with another column. Distribution and cardinality
     # for the shuffled value stays the same, but the correlation with the column it is correlated with is impacted
@@ -352,6 +391,7 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
     return df, params
 
 
+@skip_failed_injection
 def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Shifting a numerical column by x standard deviation, affecting both the standard deviation of the data but also
     # the mean if the data is moved toward a single direction. The function handles both cases.
@@ -449,6 +489,7 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     return df, params
 
 
+@skip_failed_injection
 def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Giving a few rows a primary key that another row already uses.
 
@@ -501,6 +542,7 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[Dat
     return df, params
 
 
+@skip_failed_injection
 def inject_out_of_range(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
     # Creates values past the minimum / maximum recorded at calibration.
 
