@@ -1,5 +1,8 @@
 from typing import Any
-from config import INJECTION_LOG_DIR, AGENT_LOG_DIR
+from config import INJECTION_LOG_DIR, AGENT_LOG_DIR, RECONCILIATION_LOG_DIR, KAGGLE_DATASET_NAME
+from agent.agent_run import _read_agent_logs, _save_agent_logs
+from errors_injection.injection_logs import find_latest_id
+from datetime import datetime, timezone
 import json
 
 
@@ -55,7 +58,31 @@ def _compare_lists(list1: list[dict], list2: list[dict]) -> list[dict[str, Any]]
     return all_matches
 
 
-def reconcile_agent_vs_injection_logs(run_number: int) -> None:
+def _append_reconciliation_log(d_rec: dict[str, Any]) -> None:
+    # Not reset between runs: this file is the score history of the agent, the same way usage.json keeps
+    # the cost history. Scores are only comparable within a dataset, so they are kept in one list per dataset.
+    if RECONCILIATION_LOG_DIR.exists():
+        d_logs = _read_agent_logs(RECONCILIATION_LOG_DIR)
+    else:
+        d_logs = {
+            "datetime_created_utc": datetime.now(timezone.utc).isoformat(),
+            "reconciliations": {},
+        }
+
+    # First reconciliation ever run on that dataset
+    if KAGGLE_DATASET_NAME not in d_logs["reconciliations"]:
+        d_logs["reconciliations"][KAGGLE_DATASET_NAME] = []
+
+    # Same identifier logic as the injection and agent logs, numbered within the dataset
+    d_rec["id"] = find_latest_id(d_logs["reconciliations"][KAGGLE_DATASET_NAME])
+
+    d_logs["reconciliations"][KAGGLE_DATASET_NAME].append(d_rec)
+
+    _save_agent_logs(d_logs=d_logs, log_dir=RECONCILIATION_LOG_DIR)
+    return None
+
+
+def reconcile_agent_vs_injection_logs(run_number: int = 1) -> dict[str, Any]:
     dict_agent = json.load(open(AGENT_LOG_DIR))
     dict_inj = json.load(open(INJECTION_LOG_DIR))
 
@@ -75,7 +102,70 @@ def reconcile_agent_vs_injection_logs(run_number: int) -> None:
     print(f"Matched errors: {len(injected_errors_found_by_agents)}, "
           f"False positives: {nb_false_positive}, "
           f"Errors not found: {nb_errors_not_found}")
-    return None
+
+    # Building a memory that will be passed on to the agent. Storing error type | column name | table name
+    ids_found = [err_found["id1"] for err_found in injected_errors_found_by_agents]
+    ids_not_found = [err_inj["id"] for err_inj in dict_inj["injections"] if err_inj["id"] not in ids_found]
+
+    diagnostic_id_found = [err_found["id2"] for err_found in injected_errors_found_by_agents]
+    diagnostic_false_positive_id = [diagnostic["id"]
+                                    for diagnostic in dict_agent["investigation"]
+                                    if diagnostic["id"] not in diagnostic_id_found]
+
+    # Listing the anomalies that were found by the agent
+    anomalies_found_by_agent = []
+
+    for err_found in injected_errors_found_by_agents:
+        for err_inj in dict_inj["injections"]:
+            if err_found["id1"] == err_inj["id"]:
+                anomalies_found_by_agent.append(
+                    f"{err_inj['error_type']} | "
+                    f"{err_inj['dict_rec']['column']}  | "
+                    f"{err_inj['table_name']}")
+
+    # Listing the anomalies that were not found by the agent
+    anomalies_not_found_by_agent = []
+    for id_not_found in ids_not_found:
+        for err_inj in dict_inj["injections"]:
+            if err_inj["id"] == id_not_found:
+                anomalies_not_found_by_agent.append(
+                    f"{err_inj['error_type']} | "
+                    f"{err_inj['dict_rec']['column']}  | "
+                    f"{err_inj['table_name']}")
+
+    # Listing the false positive the agent diagnosed but were wrong
+    incorrect_diagnostics_made_by_agent = []
+    for false_positive in diagnostic_false_positive_id:
+        for diagnostic in dict_agent["investigation"]:
+            if false_positive == diagnostic["id"]:
+                incorrect_diagnostics_made_by_agent.append(
+                    f"{diagnostic['params']['anomaly']} | "
+                    f"{diagnostic['params']['column']} | "
+                    f"{diagnostic['params']['table']} | "
+                    f"{diagnostic['params']['severity']}")
+
+    # Score system based on the number of anomalies found. If the agent flags more than the anomalies,
+    # it would just be a check by a human agent in a production environment. But missing an anomaly is where
+    # there could be some operational consequences.
+    # A run where nothing was injected has nothing to miss, so it scores full marks for now.
+    score_agent = round(len(injected_errors_found_by_agents) / len(all_inj_errors), 4) if all_inj_errors else 1
+
+    # Aggregating all data into one dict
+    d_rec = {
+        "run_number": run_number,
+        "datetime_created_utc": datetime.now(timezone.utc).isoformat(),
+        "total_anomalies": len(all_inj_errors),
+        "total_anomalies_detected_by_agent": len(injected_errors_found_by_agents),
+        "total_diagnostics_made_by_agent": len(all_agents_diagnostics),
+        "anomalies_detected_by_agent": anomalies_found_by_agent,
+        "anomalies_not_found_by_agent": anomalies_not_found_by_agent,
+        "incorrect_diagnostics_made_by_agent": incorrect_diagnostics_made_by_agent,
+        "score_agent": score_agent
+    }
+
+    _append_reconciliation_log(d_rec=d_rec)
+
+    return d_rec
 
 
 if __name__ == "__main__":

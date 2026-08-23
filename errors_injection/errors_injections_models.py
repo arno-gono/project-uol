@@ -775,7 +775,11 @@ class ErrorInjectionsModels:
                 # Storing the corrupted injected error to avoid error conflicts.
                 self.errors_injected.append(error_name)
 
-                print(f"\tError {error_name} was injected in {table_name}. Creating Log")
+                if "column" in params:
+                    print(f"\tError {error_name} was injected in {params['column']} | {table_name}. Creating Log")
+                else:
+                    print(f"\tError {error_name} was injected in {table_name}. Creating Log")
+
 
                 # The error is validated: overwriting the df that will be returned to the caller
                 # and saved for the agent.
