@@ -439,7 +439,7 @@ def _aggregate_metadata(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> dict[str, 
     dict_metadata = {}
 
     for n, t in zip(df["name"], df["type"]):
-        print(f"Starting calibration for {n}")
+        print(f"Starting calibration for {t} {n}")
         dict_table_metadata = _get_metadata_profiling_from_table(table_name=n, co=conn)
         dict_metadata[n] = {"type": t} | dict_table_metadata
 
