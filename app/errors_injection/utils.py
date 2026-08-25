@@ -1,6 +1,6 @@
 from typing import Any, Callable
 import functools
-from errors_injection.injection_logs import append_failed_injection_logs
+from app.errors_injection.injection_logs import append_failed_injection_logs
 
 
 def skip_failed_injection(func_error: Callable) -> Callable:

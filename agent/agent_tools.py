@@ -1,7 +1,7 @@
 import pandas as pd
-from config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED
-from data.utils import get_calibration_file_as_dict
-from data.sqlite_connector import connecting_to_sqlite
+from app.config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED
+from app.data.utils import get_calibration_file_as_dict
+from app.data.sqlite_connector import connecting_to_sqlite
 
 
 # Available tools for the agent. Format as per Claude's Documentation.

@@ -1,5 +1,5 @@
 import pandas as pd
-from errors_injection.errors_injections_models import inject_new_column, inject_duplicate_rows
+from app.errors_injection import inject_new_column, inject_duplicate_rows
 
 
 def test_inject_new_column():

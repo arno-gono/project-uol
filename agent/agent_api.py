@@ -1,7 +1,7 @@
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from config import AGENT_MODEL, AGENT_MAX_TOKENS
+from app.config import AGENT_MODEL, AGENT_MAX_TOKENS
 from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
 
 

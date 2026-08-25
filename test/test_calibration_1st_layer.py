@@ -1,8 +1,8 @@
 import pandas as pd
-from data_calibration.calibration_1st_layer import (_get_general_data, _get_profile_datatype, _is_datetime_column,
-                                                    _get_cramers_v, _get_correlation_dict,
-                                                    _get_profile_cardinality_distribution, _is_primary_key,
-                                                    _is_null_allowed, _get_primary_key_columns, _get_fk_coverage)
+from app.data_calibration import (_get_general_data, _get_profile_datatype, _is_datetime_column,
+                                  _get_cramers_v, _get_correlation_dict,
+                                  _get_profile_cardinality_distribution, _is_primary_key,
+                                  _is_null_allowed, _get_primary_key_columns, _get_fk_coverage)
 
 def test_get_general_data():
     df = pd.DataFrame(

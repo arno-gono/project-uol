@@ -1,4 +1,4 @@
-from config import DB_DIR, DB_NAME
+from app.config import DB_DIR, DB_NAME
 import json
 import sqlite3
 import pandas as pd

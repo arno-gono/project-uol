@@ -2,11 +2,11 @@ import random
 import numpy as np
 from typing import Any
 from pandas import DataFrame
-from config import KAGGLE_DATASET_NAME
-from data.sqlite_connector import connecting_to_sqlite
-from data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
-from errors_injection.injection_logs import append_injection_logs
-from errors_injection.utils import skip_failed_injection
+from app.config import KAGGLE_DATASET_NAME
+from app.data.sqlite_connector import connecting_to_sqlite
+from app.data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
+from app.errors_injection.injection_logs import append_injection_logs
+from app.errors_injection.utils import skip_failed_injection
 import pandas as pd
 
 

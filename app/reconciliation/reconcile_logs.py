@@ -1,7 +1,7 @@
 from typing import Any
-from config import INJECTION_LOG_DIR, AGENT_LOG_DIR, RECONCILIATION_LOG_DIR, KAGGLE_DATASET_NAME
+from app.config import INJECTION_LOG_DIR, AGENT_LOG_DIR, RECONCILIATION_LOG_DIR, KAGGLE_DATASET_NAME
 from agent.agent_run import _read_agent_logs, _save_agent_logs
-from errors_injection.injection_logs import find_latest_id
+from app.errors_injection.injection_logs import find_latest_id
 from datetime import datetime, timezone
 import json
 

@@ -220,9 +220,9 @@ __marimo__/
 # Others
 /.idea
 .kaggle/acces_token
-data/.DS_Store
+app/data/.DS_Store
 .DS_Store
-/db_files
-/db_agent
-/logs
+/app/db_files
+/app/db_agent
+/app/logs
 *.py~

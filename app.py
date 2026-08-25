@@ -1,8 +1,8 @@
 import streamlit as st
-from config import AVAILABLE_KAGGLE_DATASETS, KAGGLE_DATASET_NAME
 from streamlit_pages.sidebar import sidebar_config
 from streamlit_pages.tab_results import tab_results_config
 from streamlit_pages.tab_investigation import tab_investigation_config
+
 
 # Page configuration
 st.set_page_config(
@@ -23,19 +23,4 @@ with tab1:
 
 with tab2:
     tab_results_config()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

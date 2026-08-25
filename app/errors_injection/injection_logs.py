@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from config import INJECTION_LOG_DIR
+from app.config import INJECTION_LOG_DIR
 
 """
 Keeping logs of all errors injected, including various parameters (nb of duplicated rows added etc) to test 

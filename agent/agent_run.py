@@ -1,9 +1,9 @@
 from agent.agent_api import ask_agent
 from typing import Any
-from config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR
+from app.config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR
 from datetime import datetime, timezone
-from errors_injection.errors_injections_models import ERROR_TYPES_DICT
-from errors_injection.injection_logs import find_latest_id
+from app.errors_injection.errors_injections_models import ERROR_TYPES_DICT
+from app.errors_injection.injection_logs import find_latest_id
 from agent.agent_cost_calc import calculate_costs
 import json
 
@@ -151,7 +151,7 @@ def _append_agent_log(run_number: int, **params: Any) -> None:
     return None
 
 
-def _parse_response_to_log(resp: list[Any]) -> None:
+def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
 
     # Saving each outcome of the investigation into an agent log file
     for block in resp:
@@ -200,7 +200,7 @@ def run_agent_investigation(run_number: int = 1) -> None:
     print("Cost investigation: $", round(cost_investigation, 3))
 
     # Parsing the response from the API and saving to a log
-    _parse_response_to_log(response.content)
+    _parse_response_to_log(response.content, run_number)
 
     return None
 

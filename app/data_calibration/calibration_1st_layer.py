@@ -1,15 +1,15 @@
 import json
 import os
 from typing import Any
-from config import (KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB, MIN_DATETIME_PARSE_RATIO,
-                    KAGGLE_TABLE_MAX_ROWS)
-from data.sqlite_connector import connecting_to_sqlite
+from app.config import (KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, MAX_CARDINALITY_NB, MIN_DATETIME_PARSE_RATIO,
+                        KAGGLE_TABLE_MAX_ROWS)
+from app.data.sqlite_connector import connecting_to_sqlite
 import pandas as pd
 import numpy as np
 import sqlite3
 from scipy.stats import contingency
-from data.utils import read_column_from_whole_dataset
-from data_calibration.calibration_cluster import get_ml_profile
+from app.data.utils import read_column_from_whole_dataset
+from app.data_calibration.calibration_cluster import get_ml_profile
 
 
 # remapping numpy / pandas datatypes to Python built-ins

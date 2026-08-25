@@ -1,8 +1,8 @@
 import kagglehub
 import pandas as pd
 import os
-from data.sqlite_connector import connecting_to_sqlite
-from config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS, DATA_CLEAN_TEST_SPLIT
+from app.data.sqlite_connector import connecting_to_sqlite
+from app.config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS, DATA_CLEAN_TEST_SPLIT
 
 
 def _download_data_from_kaggle(kaggle_dataset: str) -> str:

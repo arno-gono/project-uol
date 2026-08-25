@@ -1,5 +1,5 @@
 import sqlite3
-from config import DB_DIR, DB_DIR_AGENT, get_db_name
+from app.config import DB_DIR, DB_DIR_AGENT, get_db_name
 
 
 def connecting_to_sqlite(kaggle_dataset: str, database_type: str = "clean") -> sqlite3.Connection | None:

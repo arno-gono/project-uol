@@ -1,4 +1,4 @@
-from reconciliation.reconcile_logs import _compare_lists
+from app.reconciliation.reconcile_logs import _compare_lists
 
 
 def _record(id_: int, table: str = "TABLE_A", column: str = "COLUMN_A",

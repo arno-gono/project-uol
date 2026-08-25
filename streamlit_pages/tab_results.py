@@ -8,6 +8,6 @@ def tab_results_config():
     """
         What to show - Dataset granularity
             - Chart: Agent's score evolution on all the available recs
-            - Table with all investigations: nb errors injeced, nb diagnostics, nb matches, model used, 
+            - Table with all investigations: nb errors injected, nb diagnostics, nb matches, model used, 
             investigation cost
     """
