@@ -144,12 +144,6 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1) -> dict[str, Any]:
                     f"{diagnostic['params']['table']} | "
                     f"{diagnostic['params']['severity']}")
 
-    # Score system based on the number of anomalies found. If the agent flags more than the anomalies,
-    # it would just be a check by a human agent in a production environment. But missing an anomaly is where
-    # there could be some operational consequences.
-    # A run where nothing was injected has nothing to miss, so it scores full marks for now.
-    score_agent = round(len(injected_errors_found_by_agents) / len(all_inj_errors), 4) if all_inj_errors else 1
-
     # Aggregating all data into one dict
     d_rec = {
         "run_number": run_number,
@@ -160,7 +154,6 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1) -> dict[str, Any]:
         "anomalies_detected_by_agent": anomalies_found_by_agent,
         "anomalies_not_found_by_agent": anomalies_not_found_by_agent,
         "incorrect_diagnostics_made_by_agent": incorrect_diagnostics_made_by_agent,
-        "score_agent": score_agent
     }
 
     _append_reconciliation_log(d_rec=d_rec)
