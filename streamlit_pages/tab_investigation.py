@@ -15,22 +15,22 @@ def _section_user_input():
     # User Inputs: choosing which function is going to be run
     st.subheader("Functions to run")
 
-    rb_col_1, rb_col_2, rb_col_3, rb_col_4, rb_col_5 = st.columns(5)
+    tg_col_1, tg_col_2, tg_col_3, tg_col_4, tg_col_5 = st.columns(5)
 
-    with rb_col_1:
-        option_import_data = st.radio("Import Data", [True, False], index=0)
+    with tg_col_1:
+        option_import_data = st.toggle(label="Import Data", value=True)
 
-    with rb_col_2:
-        option_run_calibration = st.radio("Run Calibration", [True, False], index=0)
+    with tg_col_2:
+        option_run_calibration = st.toggle(label="Run Calibration", value=True)
 
-    with rb_col_3:
-        option_inject_errors = st.radio("Inject Errors", [True, False], index=0)
+    with tg_col_3:
+        option_inject_errors = st.toggle(label="Inject Errors", value=True)
 
-    with rb_col_4:
-        option_call_agent = st.radio("Call Agent", [True, False], index=0)
+    with tg_col_4:
+        option_call_agent = st.toggle(label="Call Agent", value=True)
 
-    with rb_col_5:
-        option_reconcile = st.radio("Reconcile Logs", [True, False], index=0)
+    with tg_col_5:
+        option_reconcile = st.toggle(label="Reconcile Logs", value=True)
 
     output = []
     if st.button("Run Investigation"):
