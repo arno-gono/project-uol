@@ -3,6 +3,7 @@ from app.data_calibration.calibration_1st_layer import dataset_calibration
 from app.errors_injection.random_injection_runner import run_multiple_rounds
 from agent.agent_run import run_agent_investigation
 from app.reconciliation.reconcile_logs import reconcile_agent_vs_injection_logs
+from app.init_logs import init_logs
 
 
 def main(
@@ -14,6 +15,8 @@ def main(
         reconcile_agent_vs_injection: bool = True
 ):
 
+    # The logs folder is not versioned: creating it and the empty log files if this is a fresh clone
+    init_logs()
 
     # Downloading data from a Kaggle dataset and migrating to SQLite
     if import_dataset_and_upload:
