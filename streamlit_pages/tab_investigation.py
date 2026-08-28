@@ -38,6 +38,7 @@ def _section_user_input():
         output = io.StringIO()
         with redirect_stdout(output):
             main(
+                kaggle_dataset=st.session_state.dataset,
                 import_dataset_and_upload=option_import_data,
                 run_calibration=option_run_calibration,
                 inject_errors=option_inject_errors,
@@ -199,7 +200,6 @@ def tab_investigation_config():
     st.divider()
 
     # Second section: Result of the investigation, last one by default
-    st.divider()
     st.title("Investigation Results")
 
     # Main metrics on latest investigation run

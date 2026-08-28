@@ -183,7 +183,7 @@ def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
     return None
 
 
-def run_agent_investigation(run_number: int = 1) -> None:
+def run_agent_investigation(run_number: int = 1) -> int:
 
     # Cleaning the logs for now - should be in the Automation loop calling this function
     clean_agent_logs()
@@ -196,13 +196,14 @@ def run_agent_investigation(run_number: int = 1) -> None:
     print("\n".join(block.text for block in response.content if block.type == "text"))
 
     # Calculating cost of the investigation and storing it
-    cost_investigation = calculate_costs(dict_result["usage"])
+    cost_investigation, usage_id = calculate_costs(dict_result["usage"])
     print("Cost investigation: $", round(cost_investigation, 3))
 
     # Parsing the response from the API and saving to a log
     _parse_response_to_log(response.content, run_number)
 
-    return None
+    # The id of the usage entry is returned so the reconciliation can link a score to its cost
+    return usage_id
 
 
 if __name__ == "__main__":

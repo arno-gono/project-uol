@@ -82,7 +82,7 @@ def _append_reconciliation_log(d_rec: dict[str, Any]) -> None:
     return None
 
 
-def reconcile_agent_vs_injection_logs(run_number: int = 1) -> dict[str, Any]:
+def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None = None) -> dict[str, Any]:
     dict_agent = json.load(open(AGENT_LOG_DIR))
     dict_inj = json.load(open(INJECTION_LOG_DIR))
 
@@ -147,6 +147,7 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1) -> dict[str, Any]:
     # Aggregating all data into one dict
     d_rec = {
         "run_number": run_number,
+        "usage_id": usage_id,
         "datetime_created_utc": datetime.now(timezone.utc).isoformat(),
         "total_anomalies": len(all_inj_errors),
         "total_anomalies_detected_by_agent": len(injected_errors_found_by_agents),

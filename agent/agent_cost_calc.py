@@ -33,7 +33,7 @@ def _read_usage_log() -> dict:
     return d_logs
 
 
-def _add_usage_to_log(**params) -> None:
+def _add_usage_to_log(**params) -> int:
     d_logs = _read_usage_log()
 
     # Attributing an identifier
@@ -49,10 +49,12 @@ def _add_usage_to_log(**params) -> None:
     # Appending to logs
     with open(AGENT_USAGE_DIR, "w") as f:
         json.dump(d_logs, f, indent=4, default=str)
-    return None
+
+    # Returned so the investigation can be linked to its cost, in the reconciliation log
+    return params["id"]
 
 
-def calculate_costs(dict_costs: dict) -> float:
+def calculate_costs(dict_costs: dict) -> tuple[float, int]:
     """
         Expect a dict with the following keys:
             total_input_tokens
@@ -60,6 +62,7 @@ def calculate_costs(dict_costs: dict) -> float:
             total_cache_read
             total_cache_written
         Calculates the cost in USD given a number of input tokens and output tokens.
+        Returns the cost and the id given to the usage entry it just logged.
     """
 
     model_costs = dict_costs_api[AGENT_MODEL]
@@ -81,6 +84,6 @@ def calculate_costs(dict_costs: dict) -> float:
     dict_costs["agent_model"] = AGENT_MODEL
     dict_costs["notes"] = ""
 
-    _add_usage_to_log(**dict_costs)
+    usage_id = _add_usage_to_log(**dict_costs)
 
-    return total_cost
+    return total_cost, usage_id

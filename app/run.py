@@ -36,9 +36,11 @@ def main(
             run_multiple_rounds(run_number)
 
     # Calling the agents to run an investigation
+    usage_id = None
+
     if call_agent_investigation:
-        run_agent_investigation()
+        usage_id = run_agent_investigation()
 
     # Checking agent's findings against what was actually injected
     if reconcile_agent_vs_injection:
-        reconcile_agent_vs_injection_logs()
+        reconcile_agent_vs_injection_logs(usage_id=usage_id)
