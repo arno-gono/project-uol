@@ -2,8 +2,7 @@ import streamlit as st
 from app.run import main
 import io
 from contextlib import redirect_stdout
-from streamlit_pages.data import (get_last_reconciliation_log, get_latest_usage, get_all_usage_for_dataset,
-                                  get_all_reconciliation_logs)
+from streamlit_pages.data import get_last_reconciliation_log, get_latest_usage, get_investigations_for_dataset
 import pandas as pd
 from app.reconciliation.utils import calc_score_agent
 
@@ -85,59 +84,57 @@ def _calc_score_from_log(d_rec) -> float:
     return round(score_agent, 4)
 
 
-
-def _section_investigation_result_details():
+def _section_investigation_result_details() -> None:
 
     st.divider()
     st.subheader("Previous Runs")
 
-    # Details. Getting the data and converting it to a dataframe.
-    all_usage = get_all_usage_for_dataset(dataset_name=st.session_state.dataset)
-    all_recs = get_all_reconciliation_logs(dataset_name=st.session_state.dataset)
-    df_usage = pd.DataFrame(all_usage)
-    df_recs = pd.DataFrame(all_recs)
+    # Details. Getting the data, the runs are read on the usage_id join so that the model a run was given and
+    # what it cost sit on the same line as what it scored.
+    df_recs = get_investigations_for_dataset(dataset_name=st.session_state.dataset)
 
-    if not df_usage.empty:
-        # Trimming columns
-        df_usage = df_usage[[
-            "id",
-            "datetime_created_utc",
-            "kaggle_table_max_rows",
-            "agent_max_sql_rows_read",
-            "agent_model",
-            "total_cost_usd"
-        ]]
+    if df_recs.empty:
+        return None
 
-    if not df_recs.empty:
-        df_recs = df_recs[[
-            "id",
-            "datetime_created_utc",
-            "total_anomalies",
-            "total_anomalies_detected_by_agent",
-            "anomalies_detected_by_agent",
-            "anomalies_not_found_by_agent",
-            "incorrect_diagnostics_made_by_agent"
-        ]]
+    # Trimming columns
+    df_recs = df_recs[[
+        "id",
+        "datetime_created_utc",
+        "total_anomalies",
+        "total_anomalies_detected_by_agent",
+        "agent_model",
+        "total_cost_usd",
+        "anomalies_detected_by_agent",
+        "anomalies_not_found_by_agent",
+        "incorrect_diagnostics_made_by_agent"
+    ]]
 
-        # Scoring each run before the chains are trimmed, the severity of the false positives is needed
-        df_recs.insert(4, "score_agent", df_recs.apply(_calc_score_from_log, axis=1))
+    # Scoring each run before the chains "error_type | column | table" are trimmed,
+    # the severity of the false positives is needed
+    df_recs["score_agent"] = df_recs.apply(lambda x: _calc_score_from_log(x), axis=1)
 
-        # The column and table are removed from the details, we are more interested in the type of errors that are not
-        # correctly flagged. Each cell holds a list of chains such as "error_type | column | table", so we only keep
-        # the first element of every chain.
-        for c in [
-            "anomalies_detected_by_agent", "anomalies_not_found_by_agent", "incorrect_diagnostics_made_by_agent"
-        ]:
-            df_recs[c] = df_recs[c].apply(lambda x: ", ".join(set(_parse_error_type_from_list(x))))
+    # The cost is logged as a float, it is only formatted for the table. A run reconciled without calling
+    # the agent has no usage, so no cost to show for it.
+    df_recs["total_cost_usd"] = df_recs["total_cost_usd"].apply(lambda x: "" if pd.isna(x) else f"${x:.4f}")
 
-        # Sorting and columns' header
-        df_recs = df_recs.sort_values(by=["datetime_created_utc"], ascending=True)
-        df_recs.columns = [c.replace("_", " ").title() for c in df_recs.columns]
+    # The column and table are removed from the details, we are more interested in the type of errors that are not
+    # correctly flagged. Each cell holds a list of chains such as "error_type | column | table", so we only keep
+    # the first element of every chain.
+    for c in [
+        "anomalies_detected_by_agent", "anomalies_not_found_by_agent", "incorrect_diagnostics_made_by_agent"
+    ]:
+        df_recs[c] = df_recs[c].apply(lambda x: ", ".join(set(_parse_error_type_from_list(x))))
 
-        st.markdown(
-            df_recs.to_html(index=False),
-            unsafe_allow_html=True
-        )
+    # Sorting and columns' header
+    df_recs = df_recs.sort_values(by=["datetime_created_utc"], ascending=True)
+    df_recs.columns = [c.replace("_", " ").title() for c in df_recs.columns]
+
+    st.markdown(
+        df_recs.to_html(index=False),
+        unsafe_allow_html=True
+    )
+
+    return None
 
 
 def _section_investigation_result_metrics() -> None:

@@ -1,6 +1,7 @@
 from typing import Any
 import os
 import json
+import pandas as pd
 from app.config import RECONCILIATION_LOG_DIR, AGENT_USAGE_DIR
 from datetime import datetime
 
@@ -52,6 +53,42 @@ def get_all_usage_for_dataset(dataset_name: str) -> list[dict[str, Any]] | None:
     return [l for l in d_logs["historical_usage"] if l["kaggle_dataset"] == dataset_name]
 
 
+def get_investigations_for_dataset(dataset_name: str) -> pd.DataFrame:
+
+    df_recs = pd.DataFrame(get_all_reconciliation_logs(dataset_name=dataset_name))
+    df_usage = pd.DataFrame(get_all_usage_for_dataset(dataset_name=dataset_name))
+
+    # No investigation reconciled for that dataset, there is nothing to join and nothing to trim
+    if df_recs.empty:
+        return df_recs
+
+    # usage.json and reconciliation_logs.json are joined by the key usage_id (reconciliation_logs.json) / id (usage.json).
+    # This is to know how much an investigation cost and on what model it was run on.
+    if not df_usage.empty:
+        df_recs = df_recs.merge(
+            df_usage,
+            how="left",
+            left_on="usage_id",
+            right_on="id",
+            suffixes=("", "_usage")
+        )
+
+    # Trimming to the columns for what is displayed on the dashboard.
+    return df_recs[[
+        "id",
+        "usage_id",
+        "datetime_created_utc",
+        "total_anomalies",
+        "total_anomalies_detected_by_agent",
+        "total_diagnostics_made_by_agent",
+        "anomalies_detected_by_agent",
+        "anomalies_not_found_by_agent",
+        "incorrect_diagnostics_made_by_agent",
+        "agent_model",
+        "total_cost_usd"
+    ]]
+
+
 def get_latest_usage(dataset_name: str, time_created: datetime = None) -> dict[str, Any] | None:
 
     d_logs = get_all_usage_for_dataset(dataset_name=dataset_name)
@@ -71,5 +108,5 @@ def get_latest_usage(dataset_name: str, time_created: datetime = None) -> dict[s
 if __name__ == "__main__":
     dataset_name = "airbnb/seattle"
 
-    get_latest_usage(dataset_name=dataset_name)
-    get_last_reconciliation_log(dataset_name=dataset_name)
+    # get_latest_usage(dataset_name=dataset_name)
+    # get_last_reconciliation_log(dataset_name=dataset_name)
