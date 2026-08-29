@@ -8,10 +8,14 @@ from app.data.sqlite_connector import connecting_to_sqlite
 # This lists the functions available, what they do, the arguments they take so that they can be called by the agent.
 # Doc: https://platform.claude.com/docs/en/agents-and-tools/tool-use/build-a-tool-using-agent
 TOOLS = [
+    # Some functions are not available in SQLite (like CORR or STDDEV). Flagged by the agent. Adding it to the prompt
+    # to avoid wasting rounds on trying those SQL functions.
+    # Doc: https://sqlite.org/lang_aggfunc.html
     {
         "name": "run_sql",
         "description": "Run a read-only SQL query against the current state of the database and get the rows back. "
                        "Only SELECT clause is allowed. "
+                       "The database is SQLite: CORR, STDDEV, VARIANCE do not exist. "
                        "The tables names can be read from the statement SELECT * FROM sqlite_master. "
                        "The tables corresponding to the calibrated file are separated from the new rows: "
                        "tables with the suffix _new_data are the ones corresponding to new data. A _new_data table "

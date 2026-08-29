@@ -5,83 +5,138 @@ from datetime import datetime, timezone
 from app.errors_injection.errors_injections_models import ERROR_TYPES_DICT
 from app.errors_injection.injection_logs import find_latest_id
 from agent.agent_cost_calc import calculate_costs
+from app.logs_data import get_all_reconciliation_logs
 import json
 
 
 # Importing the types of errors and their description so that the agent can point to a label
 # when it identifies an anomaly.
-error_types = "\n".join(f"- {error_name}: {details['description']}"
+error_types = "\n\t".join(f"- {error_name}: {details['description']}"
                         for error_name, details in ERROR_TYPES_DICT.items())
 
 # Writing a System prompt in order to not add it to the conversation every round of the investigation.
 # Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#give-claude-a-role
 
-system_prompt_agent = f"""You are a data quality analyst investigating a SQLite database.
+def _previous_runs_section(kaggle_dataset: str) -> str:
 
-### **THE SETUP**
- 
-The database was profiled while it was still clean. That profile is called the calibration and
-it describes, for every table:
-- total number of rows, number of duplicated rows
-- for every column: datatype, if it accepts NULLs, the distribution of its values and number of unique values
-- correlations between numeric columns, and associations between categorical ones
-- columns that look like they could be primary or foreign keys
-- a clustering of the rows obtained with machine learning techniques
+    # Reformatting previous reconciliation logs to guide the agent in its investigation and find more accurate answers.
 
-A new batch of data arrived, and will be appended to the relevant table: 
-they are currently kept separated from the main table. 
-You will need to check if there is nothing anomalous in this data by comparing it with the data that was calibrated.
+    # Getting previous investigations results (reconciliations) for the selected database.
+    prev_recs = get_all_reconciliation_logs(dataset_name=kaggle_dataset)
 
-The new rows are in a table named after the calibrated one with a suffix "_new_data".
+    if prev_recs is None:
+        return ""
 
-### **HOW TO INVESTIGATE**
+    count_investigation = 1
 
-Start with checking the tables available with the tool run_sql and the query "SELECT * FROM sqlite_master;".
+    # Formatting the logs into a prompt.
+    prompt_recs = """
+    Methodology:
+    - Nb diagnostics: number of diagnostics made by the agent. 
+    - Nb anomalies: number of actual errors that were in the dataset.
+    - Nb anomalies found: number of anomalies that were found by the agent.
+    - Details anomalies found: list of anomalies with format [error type | column | table]
+    - Details anomalies not found: list of anomalies missed by agent with format [error type | column | table] 
+    - Details incorrect diagnostics: list of of anomalies with format [error type | column | table | severity]
+    """
 
-Compare what a _new_data table holds against what the calibration says about its table.
-A difference between the two is a candidate error.
+    for rec in prev_recs:
+        temp_rec_prompt = f"""
+    ***INVESTIGATION {count_investigation}***
+    - Nb diagnostics: {rec['total_diagnostics_made_by_agent']}
+    - Nb anomalies: {rec['total_anomalies']}
+    - Nb anomalies found: {rec['total_anomalies_detected_by_agent']}
+    - Details anomalies found: {rec['anomalies_detected_by_agent']}
+    - Details anomalies not found: {rec['anomalies_not_found_by_agent']}
+    - Details incorrect diagnostics: {rec['incorrect_diagnostics_made_by_agent']}
+    """
 
-The new data will most likely slightly drift from the original data: there is no need to report 
-changes that are within limits to a reasonable tolerance. The batch might hold fewer rows than the calibrated 
-table, so weigh a difference against the number of rows it is measured on before reporting it. 
-Report only the anomalies you would rate as Medium, High or Critical.
+        # Adding the investigation's prompt to the main one and incrementing the counter.
+        prompt_recs += temp_rec_prompt
+        count_investigation += 1
 
-The calibrated tables might contain a lot of data. Refer to the calibration file rather than selecting all rows
-from these tables. You can occasionally query the calibrated tables during an investigation, but in this case 
-use a COUNT, AVG, GROUP BY or LIMIT in your statement. 
+    prompt = f"""
+    ### **PREVIOUS RUNS**
+    
+    Whenever new data is added to the tables and an agent is called, the agent's output is crosschecked 
+    and other errors are also checked and reconciled. Below is a chronological list 
+    of previous reconciliations' results.
+    {prompt_recs}
+    """
 
-### **OUTPUT**
+    return prompt
 
-End your investigation with a section starting with ### **OUTPUT**, one finding per line, in this
-format:
 
-Table name | Column Name | Anomaly | Calibrated | Current | Number of affected rows | Severity
+def _get_system_prompt(kaggle_dataset: str) -> str:
 
-Example of expected output:
-### **OUTPUT**
-Table A | Col A | insert_null | 0 | 10 | 14 | Critical
-Table B | Col A & Col B | correlation_break | 54% | 13% | 30 | Critical
-Table C | Col C | distribution_shift | 54 | 50 | 72 | High
+    system_prompt_agent = f"""You are a data quality analyst investigating a SQLite database.
+    
+    ### **THE SETUP**
+     
+    The database was profiled while it was still clean. That profile is called the calibration and
+    it describes, for every table:
+    - total number of rows, number of duplicated rows
+    - for every column: datatype, if it accepts NULLs, the distribution of its values and number of unique values
+    - correlations between numeric columns, and associations between categorical ones
+    - columns that look like they could be primary or foreign keys
+    - a clustering of the rows obtained with machine learning techniques
+    
+    A new batch of data arrived, and will be appended to the relevant table: 
+    they are currently kept separated from the main table. 
+    You will need to check if there is nothing anomalous in this data by comparing it with the data that was calibrated.
+    
+    The new rows are in a table named after the calibrated one with a suffix "_new_data".
+    
+    ### **HOW TO INVESTIGATE**
+    
+    Start with checking the tables available with the tool run_sql and the query "SELECT * FROM sqlite_master;".
+    
+    Compare what a _new_data table holds against what the calibration says about its table.
+    A difference between the two is a candidate error.
+    
+    The new data will most likely slightly drift from the original data: there is no need to report 
+    changes that are within limits to a reasonable tolerance. The batch might hold fewer rows than the calibrated 
+    table, so weigh a difference against the number of rows it is measured on before reporting it. 
+    Report only the anomalies you would rate as Medium, High or Critical.
+    
+    The calibrated tables might contain a lot of data. Refer to the calibration file rather than selecting all rows
+    from these tables. You can occasionally query the calibrated tables during an investigation, but in this case 
+    use a COUNT, AVG, GROUP BY or LIMIT in your statement. 
+    
+    ### **OUTPUT**
+    
+    End your investigation with a section starting with ### **OUTPUT**, one finding per line, no line breaks, strictly 
+    in this format:
+    
+    Table name | Column Name | Anomaly | Calibrated | Current | Number of affected rows | Severity
+    
+    Example of expected output:
+    ### **OUTPUT**
+    Table A | Col A | insert_null | 0 | 10 | 14 | Critical
+    Table B | Col A & Col B | correlation_break | 54% | 13% | 30 | Critical
+    Table C | Col C | distribution_shift | 54 | 50 | 72 | High
+    
+    - "Calibrated" and "Current" column: No need to have details. For example if the calibrated datatype is text and 
+    you flag numeric entries, enter "Text values" for Calibrated and "Numeric values" for Current. If this is for a 
+    correlation, enter "53.5" for Calibrated directly and "34.5" for Current if this is what you calculate. No need for
+    excessive details
+    - "Anomaly" column: it is the type of anomaly that has been detected. Apply exactly one of the names listed below, 
+    so they can be parsed. Only create a new name if none of them describes what you found.
+    
+    {error_types}
+    {_previous_runs_section(kaggle_dataset)}    
+    ### **FEEDBACK**
+    
+    Not directly related with the results of the investigation. 
+    Optional section where you can give feedback about how to improve the model: for example new tools to help investigate,
+    system prompt needing more accurate details or better guidance, or any other suggestions to optimise this model.  
+    """
+    return system_prompt_agent
 
-- "Calibrated" and "Current" column: No need to have details. For example if the calibrated datatype is text and 
-you flag numeric entries, enter "Text values" for Calibrated and "Numeric values" for Current. If this is for a 
-correlation, enter "53.5" for Calibrated directly and "34.5" for Current if this is what you calculate. No need for
-excessive details
-- "Anomaly" column: it is the type of anomaly that has been detected. Apply exactly one of the names listed below, 
-so they can be parsed. Only create a new name if none of them describes what you found.
-
-{error_types}
-
-### **FEEDBACK**
-
-Not directly related with the results of the investigation. 
-Optional section where you can give feedback about how to improve the model: for example new tools to help investigate,
-system prompt needing more accurate details or better guidance, or any other suggestions to optimise this model.  
-
-"""
 
 # The system prompt holds the instructions, so the user message only has to start the run.
 prompt_agent = "Investigate the database and report what you find."
+
 
 def _read_agent_logs(log_dir: str) -> dict[str, Any]:
     with open(log_dir, "r") as f:
@@ -166,9 +221,13 @@ def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
                 agent_logs = block.text.split("**OUTPUT**")[1].strip().split("\n")
 
             for a_log in agent_logs:
+                if a_log.strip() == "":
+                    continue
+
                 # format_output as per defined in the prompt to the agent.
                 # This will need to be changed if the prompt format changes.
                 format_output = [l.strip() for l in a_log.split("|")]
+
                 dict_output = {
                     "table": format_output[0],
                     "column": format_output[1],
@@ -183,12 +242,12 @@ def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
     return None
 
 
-def run_agent_investigation(run_number: int = 1) -> int:
+def run_agent_investigation(kaggle_dataset: str, run_number: int = 1) -> int:
 
     # Cleaning the logs for now - should be in the Automation loop calling this function
     clean_agent_logs()
 
-    dict_result = ask_agent(user_input=prompt_agent, system_prompt=system_prompt_agent)
+    dict_result = ask_agent(user_input=prompt_agent, system_prompt=_get_system_prompt(kaggle_dataset=kaggle_dataset))
 
     response = dict_result["response"]
 
@@ -208,3 +267,5 @@ def run_agent_investigation(run_number: int = 1) -> int:
 
 if __name__ == "__main__":
     run_number = 1
+    kaggle_dataset = "airbnb/seattle"
+    q = _get_system_prompt(kaggle_dataset)

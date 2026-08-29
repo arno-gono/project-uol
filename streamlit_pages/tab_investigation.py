@@ -3,7 +3,7 @@ import streamlit as st
 from app.run import main
 import io
 from contextlib import redirect_stdout
-from streamlit_pages.data import get_last_reconciliation_log, get_latest_usage, get_investigations_for_dataset
+from app.logs_data import get_last_reconciliation_log, get_latest_usage, get_investigations_for_dataset
 import pandas as pd
 from app.reconciliation.utils import calc_score_agent
 

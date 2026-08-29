@@ -15,7 +15,8 @@ def calc_score_agent(
         A run where nothing was injected has nothing to miss, so it scores full marks for now.
         Decreasing the score of false positive by 0.05 if the severity is marked as High and 0.1 if the severity
         is marked as Critical. The agent cannot be fostered to generate errors to score high, all high and critical
-        errors that are false positive decrease the score
+        errors that are false positive decrease the score.
+        This function computes on reconciliation_logs results: it can be refined down the line.
     """
 
     decrease_high = 0.05

@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from streamlit_pages.data import get_investigations_for_dataset
+from app.logs_data import get_investigations_for_dataset
 from streamlit_pages.tab_investigation import _calc_score_from_log
 
 

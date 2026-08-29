@@ -39,8 +39,17 @@ def main(
     usage_id = None
 
     if call_agent_investigation:
-        usage_id = run_agent_investigation()
+        usage_id = run_agent_investigation(kaggle_dataset=kaggle_dataset)
 
     # Checking agent's findings against what was actually injected
     if reconcile_agent_vs_injection:
         reconcile_agent_vs_injection_logs(usage_id=usage_id)
+
+
+if __name__ == "__main__":
+    kaggle_dataset = "airbnb/seattle"
+    import_dataset_and_upload = False
+    run_calibration = False
+    inject_errors = True
+    call_agent_investigation = True
+    reconcile_agent_vs_injection = True
