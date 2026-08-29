@@ -13,7 +13,7 @@ def main(
         inject_errors: bool = True,
         call_agent_investigation: bool = True,
         reconcile_agent_vs_injection: bool = True
-):
+) -> None:
 
     # The logs folder is not versioned: creating it and the empty log files if this is a fresh clone
     init_logs()
@@ -44,6 +44,8 @@ def main(
     # Checking agent's findings against what was actually injected
     if reconcile_agent_vs_injection:
         reconcile_agent_vs_injection_logs(usage_id=usage_id)
+
+    return None
 
 
 if __name__ == "__main__":

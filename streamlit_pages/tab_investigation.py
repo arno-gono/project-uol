@@ -8,7 +8,7 @@ import pandas as pd
 from app.reconciliation.utils import calc_score_agent
 
 
-def _section_user_input():
+def _section_user_input() -> None:
     st.title("Run an investigation")
     st.divider()
 
@@ -52,6 +52,8 @@ def _section_user_input():
             st.write("Operation(s) Completed")
         else:
             st.text("Click the button")
+
+    return None
 
 
 def _parse_error_type_from_list(error_type_list: list) -> list:
@@ -191,7 +193,7 @@ def _section_investigation_result_metrics() -> None:
     return None
 
 
-def tab_investigation_config():
+def tab_investigation_config() -> None:
 
     # First section: radio buttons to select which function to run
     _section_user_input()
@@ -205,4 +207,6 @@ def tab_investigation_config():
 
     # Details for all investigations for that table (might move to tab_results)
     _section_investigation_result_details()
+
+    return None
 

@@ -95,7 +95,7 @@ def _section_cost_evolution(df_recs: pd.DataFrame) -> None:
     return None
 
 
-def tab_results_config():
+def tab_results_config() -> None:
 
     st.title("Results")
 
@@ -121,3 +121,5 @@ def tab_results_config():
 
     with col_chart_2:
         _section_cost_evolution(df_recs=df_filtered)
+
+    return None
