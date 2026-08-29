@@ -1,3 +1,4 @@
+from typing import Any
 import streamlit as st
 from app.run import main
 import io
@@ -65,7 +66,7 @@ def _count_false_positives_by_severity(incorrect_diagnostics: list, severity: st
     return all_severities.count(severity.lower())
 
 
-def _calc_score_from_log(d_rec) -> float:
+def _calc_score_from_log(d_rec: dict[str, Any]) -> float:
     # The score is recalculated from the reconciliation log rather than read from it, so a change in the
     # scoring applies to the runs that are already logged
     incorrect_diagnostics = d_rec["incorrect_diagnostics_made_by_agent"]
