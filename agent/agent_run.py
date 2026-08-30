@@ -262,11 +262,18 @@ def run_agent_investigation(kaggle_dataset: str, agent_model: str = AGENT_MODEL,
     # Cleaning the logs for now - should be in the Automation loop calling this function
     clean_agent_logs()
 
+    # Recording the time taken for the agent to run its investigation.
+    start_time = datetime.now(timezone.utc)
+
     dict_result = ask_agent(
         user_input=prompt_agent,
         system_prompt=_get_system_prompt(kaggle_dataset=kaggle_dataset),
         agent_model=agent_model
     )
+
+    # End of the investigation.
+    end_time = datetime.now(timezone.utc)
+    dict_result["usage"]["investigation_time_seconds"] = round((end_time - start_time).total_seconds(), 2)
 
     response = dict_result["response"]
 
