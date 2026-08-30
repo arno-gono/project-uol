@@ -16,8 +16,8 @@ def test_inject_new_column():
     assert list(df_injected["NEW_COLUMN_A"]) == [1, 2, 3]
 
     assert params == {
-        "col_error": "COLUMN_A",
-        "name_new_column": "NEW_COLUMN_A",
+        "column": "NEW_COLUMN_A",
+        "column_copied": "COLUMN_A",
         "total_nb_rows": 3
     }
 

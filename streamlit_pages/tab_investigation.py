@@ -47,12 +47,12 @@ def _section_user_input() -> None:
                 reconcile_agent_vs_injection=option_reconcile
             )
 
-    with st.expander("Console Output", expanded=True if not output else False):
+    with st.expander("Console Output", expanded=False if not output else True):
         if output:
             st.text(output.getvalue())
-            st.write("Operation(s) Completed")
+            st.write("Operation(s) Completed.")
         else:
-            st.text("Click the button")
+            st.text("Click Run Investigation button to start.")
 
     return None
 

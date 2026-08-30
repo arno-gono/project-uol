@@ -57,10 +57,12 @@ def _previous_runs_section(kaggle_dataset: str) -> str:
 
     prompt = f"""
     ### **PREVIOUS RUNS**
-    
-    Whenever new data is added to the tables and an agent is called, the agent's output is crosschecked 
-    and other errors are also checked and reconciled. Below is a chronological list 
-    of previous reconciliations' results.
+
+    Below are previous runs on this database, crosschecked against the anomalies that had actually been introduced.
+    Use them both ways: chase an anomaly that keeps being missed, and stop making a diagnostic that keeps coming
+    back as incorrect. An incorrect diagnostic matched no anomaly introduced, but a real anomaly reported under the
+    wrong name counts as one too: check the naming rules above before abandoning the check that produced it.
+    Over-reporting costs as much as missing, so report on the evidence, never to widen the net.
     {prompt_recs}
     """
 
@@ -110,12 +112,19 @@ def _get_system_prompt(kaggle_dataset: str) -> str:
     
     Table name | Column Name | Anomaly | Calibrated | Current | Number of affected rows | Severity
     
+    Every line holds exactly 7 fields separated by 6 pipes, in the order above. A field you cannot fill is left
+    empty between its two pipes: never drop it and never merge two of them into one. A line is parsed on its
+    number of fields and is discarded if it does not hold 7, so a finding written on 6 fields is a finding lost.
+    
     Example of expected output:
     ### **OUTPUT**
     Table A | Col A | insert_null | 0 | 10 | 14 | Critical
     Table B | Col A & Col B | correlation_break | 54% | 13% | 30 | Critical
     Table C | Col C | distribution_shift | 54 | 50 | 72 | High
+    Table D |  | duplicate_rows | 0 duplicated rows | 145 duplicated rows | 145 | Critical
     
+    - "Column Name" column: when an anomaly is measured on two columns, name both of them separated by "&",
+    as in the example above.
     - "Calibrated" and "Current" column: No need to have details. For example if the calibrated datatype is text and 
     you flag numeric entries, enter "Text values" for Calibrated and "Numeric values" for Current. If this is for a 
     correlation, enter "53.5" for Calibrated directly and "34.5" for Current if this is what you calculate. No need for
@@ -227,6 +236,12 @@ def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
                 # format_output as per defined in the prompt to the agent.
                 # This will need to be changed if the prompt format changes.
                 format_output = [l.strip() for l in a_log.split("|")]
+
+                # The agent occasionally returns a wrong OUTPUT line for its findings. Skipping the row rather
+                # than crashing the whole loop. 
+                if len(format_output) != 7:
+                    print(f"\t\033[91mline ignored, not in the expected format: {a_log}\033[0m")
+                    continue
 
                 dict_output = {
                     "table": format_output[0],

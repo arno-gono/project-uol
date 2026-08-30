@@ -29,6 +29,33 @@ def _compare_lists(list1: list[dict], list2: list[dict]) -> list[dict[str, Any]]
                 if required_key == "column" and (l1["column"] == "" or l2["column"] == ""):
                     continue
 
+                if required_key == "column":
+                    # Handling cases where 2 columns are involved: they should be separated with a " & ". It is also
+                    # the instruction passed on to the agent.
+                    columns_1 = [col.strip() for col in l1["column"].split("&")]
+                    columns_2 = [col.strip() for col in l2["column"].split("&")]
+
+                    # When 2 columns have been logged:
+                    if len(columns_1) == 2 and len(columns_2) == 2:
+                        col_a_1, col_b_1 = columns_1
+                        col_a_2, col_b_2 = columns_2
+
+                        # The agent might log "col a & col b" whereas "col b & col a" was logged in the injection error
+                        # file. Checking both scenarios.
+                        same_order = col_a_1 == col_a_2 and col_b_1 == col_b_2
+                        reversed_order = col_a_1 == col_b_2 and col_b_1 == col_a_2
+
+                        if not same_order and not reversed_order:
+                            match_found = False
+                            break
+
+                    # Single column case.
+                    elif columns_1 != columns_2:
+                        match_found = False
+                        break
+
+                    continue
+
                 if l1[required_key] != l2[required_key]:
                     match_found = False
                     break

@@ -52,9 +52,16 @@ def main(
 
 if __name__ == "__main__":
     kaggle_dataset = "airbnb/seattle"
-    agent_model = "claude-haiku-4-5"
+    agent_model = "claude-sonnet-5"
     import_dataset_and_upload = False
     run_calibration = False
     inject_errors = True
     call_agent_investigation = True
     reconcile_agent_vs_injection = True
+
+    """
+        Models available:
+            claude-haiku-4-5
+            claude-sonnet-5
+            claude-opus-5
+    """

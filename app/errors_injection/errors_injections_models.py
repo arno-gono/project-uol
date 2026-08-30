@@ -164,10 +164,11 @@ def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int 
     # Inserting a new column, taking the exact same data as the column that was picked up
     df[name_new_column] = df[col_error]
 
-    # Keeping params used in injection logs
+    # Keeping params used in injection logs. Keeping the added column so that
+    # it is easier to match with the agent's findings
     params = {
-        "column": col_error,
-        "name_new_column": name_new_column,
+        "column": name_new_column,
+        "column_copied": col_error,
         "total_nb_rows": len(df)
     }
 
@@ -375,9 +376,10 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
     # Shuffling the columns' values for the rows that were picked up
     df.loc[mask, col_error] = df.loc[mask, col_error].sample(frac=1).tolist()
 
-    # Keeping params used in injection logs
+    # Keeping params used in injection logs. Both columns are named in "column" as a correlation is measured on
+    # the pair: the agent reports the two of them, so the reconciliation has to compare the two of them.
     params = {
-        "column": col_error,
+        "column": f"{col_error} & {col_paired}",
         "col_paired": col_paired,
         "calibrated_correlation": d_calibration["correlations"][pair],
         "former_correlation": former_correlation,
@@ -401,17 +403,23 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
     d_calibration = get_calibration_file_as_dict()
     d_calibration = d_calibration[table_name]
 
-    def _has_std(values_distribution: dict[str, Any] | None) -> bool:
-        # Checking if the calibration measured a standard deviation (from .describe() pandas method)
-        if not values_distribution or "std" not in values_distribution:
+    def _has_spread(values_distribution: dict[str, Any] | None) -> bool:
+        # Checking if the calibration measured a standard deviation (from .describe() pandas method) and that the
+        # column holds more than one value. A constant column cannot move without leaving its bounds, which becomes
+        # an out_of_range type of error rather than a distribution shift.
+        if not values_distribution or "std" not in values_distribution or "min" not in values_distribution \
+                or "max" not in values_distribution:
             return False
-        return True
 
-    # Numerical columns that are not keys and that the calibration measured a standard deviation for
+        # The column is constant if the min equals to the max (and then has no spread:
+        # case not covered by this function)
+        return values_distribution["min"] != values_distribution["max"]
+
+    # Numerical columns that are not keys and that the calibration measured a spread for
     numerical_columns = [col for col, details in d_calibration["columns_details"].items()
                          if details["datatype"] in ["int", "float"]
                          and details["potential_primary_key"] is False
-                         and _has_std(details["values_distribution"])
+                         and _has_spread(details["values_distribution"])
                          and col in df.columns]
 
     if not numerical_columns:
@@ -641,7 +649,9 @@ ERROR_TYPES_DICT = {
     "wrong_datatype": {
         "func": inject_wrong_datatype,
         "description": "A new datatype appears in a column. There used to be text values and new float values appear "
-                       "for example, or text values appear where it used to be dates."
+                       "for example, or text values appear where it used to be dates. A value that was never seen at "
+                       "calibration and does not hold the calibrated datatype is a wrong_datatype and not a "
+                       "new_category: the datatype takes precedence over the label."
     },
     "insert_null": {
         "func": inject_nulls,
@@ -649,7 +659,9 @@ ERROR_TYPES_DICT = {
     },
     "duplicate_rows": {
         "func": inject_duplicate_rows,
-        "description": "A whole row appears several times in the table where there used to be no duplicate rows."
+        "description": "A whole row appears several times in the table where there used to be no duplicate rows. "
+                       "In this case, the whole entry is duplicated and not just one element. As opposed to "
+                       "duplicate_primary_key where only the key is duplicated and not the whole entry."
     },
     "insert_column": {
         "func": inject_new_column,
@@ -661,7 +673,9 @@ ERROR_TYPES_DICT = {
     },
     "new_category": {
         "func": inject_new_category,
-        "description": "A label that was not seen at calibration appears in a categorical column."
+        "description": "A label that was not seen at calibration appears in a categorical column. The new label "
+                       "has the same datatype as the calibrated one. If the datatype is different, the error is "
+                       "wrong_datatype."
     },
     "correlation_break": {
         "func": inject_correlation_break,
@@ -672,7 +686,8 @@ ERROR_TYPES_DICT = {
         "func": inject_duplicate_primary_key,
         "description": "A few rows reuse a primary key that another row already holds. The key stops being unique "
                        "but the rest of the row stays plausible. This is a different issue to duplicate_rows where "
-                       "the whole row is a duplicate, not just the primary key."
+                       "the whole entry is duplicated, not just the primary key. Point to duplicate_rows if the whole "
+                       "entry is duplicated."
     },
     "distribution_shift": {
         "func": inject_distribution_shift,
