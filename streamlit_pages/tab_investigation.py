@@ -39,6 +39,7 @@ def _section_user_input() -> None:
         with redirect_stdout(output):
             main(
                 kaggle_dataset=st.session_state.dataset,
+                agent_model=st.session_state.model,
                 import_dataset_and_upload=option_import_data,
                 run_calibration=option_run_calibration,
                 inject_errors=option_inject_errors,

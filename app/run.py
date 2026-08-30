@@ -4,10 +4,12 @@ from app.errors_injection.random_injection_runner import run_multiple_rounds
 from agent.agent_run import run_agent_investigation
 from app.reconciliation.reconcile_logs import reconcile_agent_vs_injection_logs
 from app.init_logs import init_logs
+from app.config import AGENT_MODEL
 
 
 def main(
         kaggle_dataset: str,
+        agent_model: str = AGENT_MODEL,
         import_dataset_and_upload: bool = True,
         run_calibration: bool = True,
         inject_errors: bool = True,
@@ -39,7 +41,7 @@ def main(
     usage_id = None
 
     if call_agent_investigation:
-        usage_id = run_agent_investigation(kaggle_dataset=kaggle_dataset)
+        usage_id = run_agent_investigation(kaggle_dataset=kaggle_dataset, agent_model=agent_model)
 
     # Checking agent's findings against what was actually injected
     if reconcile_agent_vs_injection:
@@ -50,6 +52,7 @@ def main(
 
 if __name__ == "__main__":
     kaggle_dataset = "airbnb/seattle"
+    agent_model = "claude-haiku-4-5"
     import_dataset_and_upload = False
     run_calibration = False
     inject_errors = True

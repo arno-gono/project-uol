@@ -9,7 +9,7 @@ from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
 load_dotenv()
 
 
-def ask_agent(user_input: str, system_prompt: str) -> dict:
+def ask_agent(user_input: str, system_prompt: str, agent_model: str = AGENT_MODEL) -> dict:
     """
         Loop for the agent's investigation, which is a back and forth using Anthropic API.
 
@@ -59,7 +59,7 @@ def ask_agent(user_input: str, system_prompt: str) -> dict:
         # Call to Anthropic API. Asking Anthropic to cache the conversation.
         # Doc: https://platform.claude.com/docs/en/api/python/beta/messages/create
         response = client.messages.create(
-            model=AGENT_MODEL,
+            model=agent_model,
             max_tokens=AGENT_MAX_TOKENS,
             cache_control={"type": "ephemeral"},
             system=system_prompt,

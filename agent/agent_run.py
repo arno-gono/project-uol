@@ -1,6 +1,6 @@
 from agent.agent_api import ask_agent
 from typing import Any
-from app.config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR
+from app.config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR, AGENT_MODEL
 from datetime import datetime, timezone
 from app.errors_injection.errors_injections_models import ERROR_TYPES_DICT
 from app.errors_injection.injection_logs import find_latest_id
@@ -242,12 +242,16 @@ def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
     return None
 
 
-def run_agent_investigation(kaggle_dataset: str, run_number: int = 1) -> int:
+def run_agent_investigation(kaggle_dataset: str, agent_model: str = AGENT_MODEL, run_number: int = 1) -> int:
 
     # Cleaning the logs for now - should be in the Automation loop calling this function
     clean_agent_logs()
 
-    dict_result = ask_agent(user_input=prompt_agent, system_prompt=_get_system_prompt(kaggle_dataset=kaggle_dataset))
+    dict_result = ask_agent(
+        user_input=prompt_agent,
+        system_prompt=_get_system_prompt(kaggle_dataset=kaggle_dataset),
+        agent_model=agent_model
+    )
 
     response = dict_result["response"]
 
@@ -255,7 +259,7 @@ def run_agent_investigation(kaggle_dataset: str, run_number: int = 1) -> int:
     print("\n".join(block.text for block in response.content if block.type == "text"))
 
     # Calculating cost of the investigation and storing it
-    cost_investigation, usage_id = calculate_costs(dict_result["usage"])
+    cost_investigation, usage_id = calculate_costs(dict_result["usage"], agent_model=agent_model)
     print("Cost investigation: $", round(cost_investigation, 3))
 
     # Parsing the response from the API and saving to a log

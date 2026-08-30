@@ -45,7 +45,33 @@ MIN_DATETIME_PARSE_RATIO = 0.95
 
 ### Agent ###
 
-# Model the agent runs on, and a ceiling in tokens being used (cost control).
+# API costs per million Tokens, in USD, for every model the agent can be run on.
+# Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+AGENT_MODELS_COSTS = {
+    "claude-haiku-4-5": {
+        "total_input_tokens": 1,
+        "total_output_tokens": 5,
+        "total_cache_read": 0.1,
+        "total_cache_written": 1.25
+    },
+    "claude-sonnet-5": {
+        "total_input_tokens": 2,
+        "total_output_tokens": 10,
+        "total_cache_read": 0.2,
+        "total_cache_written": 2.5
+    },
+    "claude-opus-5": {
+        "total_input_tokens": 5,
+        "total_output_tokens": 25,
+        "total_cache_read": 0.5,
+        "total_cache_written": 6.25
+    },
+}
+
+# A model can only be selected if its cost is known, so the choices offered are the models priced above.
+AVAILABLE_MODELS = list(AGENT_MODELS_COSTS.keys())
+
+# Model the agent runs on by default, and a ceiling in tokens being used (cost control).
 AGENT_MODEL = "claude-haiku-4-5"
 AGENT_MAX_TOKENS = 3_000
 

@@ -1,30 +1,7 @@
-from app.config import AGENT_MODEL, AGENT_USAGE_DIR, KAGGLE_DATASET_NAME, KAGGLE_TABLE_MAX_ROWS, AGENT_MAX_ROWS_RETURNED
+from app.config import AGENT_MODEL, AGENT_MODELS_COSTS, AGENT_USAGE_DIR, KAGGLE_DATASET_NAME, \
+    KAGGLE_TABLE_MAX_ROWS, AGENT_MAX_ROWS_RETURNED
 import json
 from datetime import datetime, timezone
-
-# API costs per MTok, in USD
-# Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
-
-dict_costs_api = {
-    "claude-haiku-4-5": {
-        "total_input_tokens": 1,
-        "total_output_tokens": 5,
-        "total_cache_read": 0.1,
-        "total_cache_written": 1.25
-    },
-    "claude-sonnet-5": {
-        "total_input_tokens": 2,
-        "total_output_tokens": 10,
-        "total_cache_read": 0.2,
-        "total_cache_written": 2.5
-    },
-    "claude-opus-5": {
-        "total_input_tokens": 5,
-        "total_output_tokens": 25,
-        "total_cache_read": 0.5,
-        "total_cache_written": 6.25
-    },
-}
 
 
 def _read_usage_log() -> dict:
@@ -54,18 +31,19 @@ def _add_usage_to_log(**params) -> int:
     return params["id"]
 
 
-def calculate_costs(dict_costs: dict) -> tuple[float, int]:
+def calculate_costs(dict_costs: dict, agent_model: str = AGENT_MODEL) -> tuple[float, int]:
     """
         Expect a dict with the following keys:
             total_input_tokens
             total_output_tokens
             total_cache_read
             total_cache_written
-        Calculates the cost in USD given a number of input tokens and output tokens.
+        Calculates the cost in USD given a number of input tokens and output tokens, for the model
+        the investigation was run on.
         Returns the cost and the id given to the usage entry it just logged.
     """
 
-    model_costs = dict_costs_api[AGENT_MODEL]
+    model_costs = AGENT_MODELS_COSTS[agent_model]
 
     # Nb tokens multiplied by the cost for 1 million tokens
     cost_input = dict_costs["total_input_tokens"] * model_costs["total_input_tokens"]
@@ -81,7 +59,7 @@ def calculate_costs(dict_costs: dict) -> tuple[float, int]:
     dict_costs["kaggle_dataset"] = KAGGLE_DATASET_NAME
     dict_costs["kaggle_table_max_rows"] = KAGGLE_TABLE_MAX_ROWS
     dict_costs["agent_max_sql_rows_read"] = AGENT_MAX_ROWS_RETURNED
-    dict_costs["agent_model"] = AGENT_MODEL
+    dict_costs["agent_model"] = agent_model
     dict_costs["notes"] = ""
 
     usage_id = _add_usage_to_log(**dict_costs)
