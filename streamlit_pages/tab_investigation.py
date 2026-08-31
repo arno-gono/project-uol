@@ -82,7 +82,8 @@ def _calc_score_from_log(d_rec: dict[str, Any]) -> float:
         ),
         nb_false_positive_critical=_count_false_positives_by_severity(
             incorrect_diagnostics=incorrect_diagnostics, severity="Critical"
-        )
+        ),
+        correct_nb_rows_affected=d_rec["total_correct_nb_rows_affected"]
     )
 
     return round(score_agent, 4)
@@ -100,7 +101,11 @@ def _section_investigation_result_details() -> None:
     if df_recs.empty:
         return None
 
-    # Trimming columns
+    # Scoring each run before the chains "error_type | column | table" are trimmed,
+    # the severity of the false positives is needed.
+    df_recs["score_agent"] = df_recs.apply(lambda x: _calc_score_from_log(x), axis=1)
+
+    # Trimming columns.
     df_recs = df_recs[[
         "id",
         "datetime_created_utc",
@@ -110,12 +115,9 @@ def _section_investigation_result_details() -> None:
         "total_cost_usd",
         "anomalies_detected_by_agent",
         "anomalies_not_found_by_agent",
-        "incorrect_diagnostics_made_by_agent"
+        "incorrect_diagnostics_made_by_agent",
+        "score_agent"
     ]]
-
-    # Scoring each run before the chains "error_type | column | table" are trimmed,
-    # the severity of the false positives is needed
-    df_recs["score_agent"] = df_recs.apply(lambda x: _calc_score_from_log(x), axis=1)
 
     # The cost is logged as a float, it is only formatted for the table. A run reconciled without calling
     # the agent has no usage, so no cost to show for it.

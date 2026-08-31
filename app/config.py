@@ -4,10 +4,10 @@ from pathlib import Path
 KAGGLE_DATASET_NAME = "airbnb/seattle"
 
 AVAILABLE_KAGGLE_DATASETS = [
+    "airbnb/seattle",
     "olistbr/brazilian-ecommerce",
     "shrinivasv/retail-store-star-schema-dataset",
-    "rikdifos/credit-card-approval-prediction",
-    "airbnb/seattle"
+    "rikdifos/credit-card-approval-prediction"
 ]
 
 # Managing API cost for iterating purposes. cutting all tables to a max of KAGGLE_TABLE_MAX_ROWS

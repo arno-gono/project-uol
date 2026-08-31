@@ -17,12 +17,12 @@ error_types = "\n\t".join(f"- {error_name}: {details['description']}"
 # Writing a System prompt in order to not add it to the conversation every round of the investigation.
 # Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#give-claude-a-role
 
-def _previous_runs_section(kaggle_dataset: str) -> str:
+def _previous_runs_section(kaggle_dataset: str, agent_model: str) -> str:
 
     # Reformatting previous reconciliation logs to guide the agent in its investigation and find more accurate answers.
 
-    # Getting previous investigations results (reconciliations) for the selected database.
-    prev_recs = get_all_reconciliation_logs(dataset_name=kaggle_dataset)
+    # Getting previous investigations results (reconciliations) for the selected database and model used.
+    prev_recs = get_all_reconciliation_logs(dataset_name=kaggle_dataset, agent_model=agent_model)
 
     if prev_recs is None:
         return ""
@@ -69,7 +69,7 @@ def _previous_runs_section(kaggle_dataset: str) -> str:
     return prompt
 
 
-def _get_system_prompt(kaggle_dataset: str) -> str:
+def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> str:
 
     system_prompt_agent = f"""You are a data quality analyst investigating a SQLite database.
     
@@ -133,7 +133,7 @@ def _get_system_prompt(kaggle_dataset: str) -> str:
     so they can be parsed. Only create a new name if none of them describes what you found.
     
     {error_types}
-    {_previous_runs_section(kaggle_dataset)}    
+    {_previous_runs_section(kaggle_dataset=kaggle_dataset, agent_model=agent_model)}    
     ### **FEEDBACK**
     
     Not directly related with the results of the investigation. 
@@ -267,7 +267,7 @@ def run_agent_investigation(kaggle_dataset: str, agent_model: str = AGENT_MODEL,
 
     dict_result = ask_agent(
         user_input=prompt_agent,
-        system_prompt=_get_system_prompt(kaggle_dataset=kaggle_dataset),
+        system_prompt=_get_system_prompt(kaggle_dataset=kaggle_dataset, agent_model=agent_model),
         agent_model=agent_model
     )
 
@@ -294,4 +294,4 @@ def run_agent_investigation(kaggle_dataset: str, agent_model: str = AGENT_MODEL,
 if __name__ == "__main__":
     run_number = 1
     kaggle_dataset = "airbnb/seattle"
-    q = _get_system_prompt(kaggle_dataset)
+    q = _get_system_prompt(kaggle_dataset=kaggle_dataset, agent_model=AGENT_MODEL)

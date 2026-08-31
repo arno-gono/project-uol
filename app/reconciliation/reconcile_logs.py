@@ -126,9 +126,15 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None 
     nb_false_positive = len(all_agents_diagnostics) - len(diagnostics_matching)
     nb_errors_not_found = len(all_inj_errors) - len(injected_errors_found_by_agents)
 
+    # Counting the number of time the agent was able to find out the number of rows affected by the impact.
+    correct_nb_rows_affected = len(
+        [err_found for err_found in injected_errors_found_by_agents if err_found["nb_rows_affected"]]
+    )
+
     print(f"Matched errors: {len(injected_errors_found_by_agents)}, "
           f"False positives: {nb_false_positive}, "
-          f"Errors not found: {nb_errors_not_found}")
+          f"Errors not found: {nb_errors_not_found}, "
+          f"Accurate number of rows affected: {correct_nb_rows_affected}")
 
     # Building a memory that will be passed on to the agent. Storing error type | column name | table name
     ids_found = [err_found["id1"] for err_found in injected_errors_found_by_agents]
@@ -147,7 +153,7 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None 
             if err_found["id1"] == err_inj["id"]:
                 anomalies_found_by_agent.append(
                     f"{err_inj['error_type']} | "
-                    f"{err_inj['dict_rec']['column']}  | "
+                    f"{err_inj['dict_rec']['column']} | "
                     f"{err_inj['table_name']}")
 
     # Listing the anomalies that were not found by the agent
@@ -157,7 +163,7 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None 
             if err_inj["id"] == id_not_found:
                 anomalies_not_found_by_agent.append(
                     f"{err_inj['error_type']} | "
-                    f"{err_inj['dict_rec']['column']}  | "
+                    f"{err_inj['dict_rec']['column']} | "
                     f"{err_inj['table_name']}")
 
     # Listing the false positive the agent diagnosed but were wrong
@@ -179,6 +185,7 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None 
         "total_anomalies": len(all_inj_errors),
         "total_anomalies_detected_by_agent": len(injected_errors_found_by_agents),
         "total_diagnostics_made_by_agent": len(all_agents_diagnostics),
+        "total_correct_nb_rows_affected": correct_nb_rows_affected,
         "anomalies_detected_by_agent": anomalies_found_by_agent,
         "anomalies_not_found_by_agent": anomalies_not_found_by_agent,
         "incorrect_diagnostics_made_by_agent": incorrect_diagnostics_made_by_agent,
