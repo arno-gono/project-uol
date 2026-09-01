@@ -17,6 +17,14 @@ error_types = "\n\t".join(f"- {error_name}: {details['description']}"
 # Writing a System prompt in order to not add it to the conversation every round of the investigation.
 # Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#give-claude-a-role
 
+def _count_error_types(details: list) -> dict[str, int]:
+    # The details are logged as "error type | column | table", the column and the table being dropped here. Simplifying
+    # task for the agent and avoid overfit: returning the error type only rather than the error type + column and table.
+    error_types = [detail.split(" | ")[0].strip() for detail in details]
+
+    return {error_type: error_types.count(error_type) for error_type in sorted(set(error_types))}
+
+
 def _previous_runs_section(kaggle_dataset: str, agent_model: str) -> str:
 
     # Reformatting previous reconciliation logs to guide the agent in its investigation and find more accurate answers.
@@ -35,9 +43,12 @@ def _previous_runs_section(kaggle_dataset: str, agent_model: str) -> str:
     - Nb diagnostics: number of diagnostics made by the agent. 
     - Nb anomalies: number of actual errors that were in the dataset.
     - Nb anomalies found: number of anomalies that were found by the agent.
-    - Details anomalies found: list of anomalies with format [error type | column | table]
-    - Details anomalies not found: list of anomalies missed by agent with format [error type | column | table] 
-    - Details incorrect diagnostics: list of of anomalies with format [error type | column | table | severity]
+    - Error types found: number of anomalies found by the agent, per type of error.
+    - Error types not found: number of anomalies missed by the agent, per type of error.
+    - Error types incorrectly diagnosed: number of incorrect diagnostics made by the agent, per type of error.
+
+    The columns and the tables the anomalies were on are left out on purpose: every run is given its own random
+    set of anomalies, so a check that keeps missing is worth repeating, the column it was missed on is not.
     """
 
     for rec in prev_recs:
@@ -46,9 +57,9 @@ def _previous_runs_section(kaggle_dataset: str, agent_model: str) -> str:
     - Nb diagnostics: {rec['total_diagnostics_made_by_agent']}
     - Nb anomalies: {rec['total_anomalies']}
     - Nb anomalies found: {rec['total_anomalies_detected_by_agent']}
-    - Details anomalies found: {rec['anomalies_detected_by_agent']}
-    - Details anomalies not found: {rec['anomalies_not_found_by_agent']}
-    - Details incorrect diagnostics: {rec['incorrect_diagnostics_made_by_agent']}
+    - Error types found: {_count_error_types(details=rec['anomalies_detected_by_agent'])}
+    - Error types not found: {_count_error_types(details=rec['anomalies_not_found_by_agent'])}
+    - Error types incorrectly diagnosed: {_count_error_types(details=rec['incorrect_diagnostics_made_by_agent'])}
     """
 
         # Adding the investigation's prompt to the main one and incrementing the counter.
@@ -95,7 +106,11 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     
     Compare what a _new_data table holds against what the calibration says about its table.
     A difference between the two is a candidate error.
-    
+
+    Keys are the exception: a primary or a foreign key belongs to the table as a whole, so check it against the
+    calibrated table and its _new_data batch together. A row might point at a parent from an earlier batch and is not 
+    an orphan in that case. A unique key in the new batch is still a duplicate if the calibrated table already uses it.
+
     The new data will most likely slightly drift from the original data: there is no need to report 
     changes that are within limits to a reasonable tolerance. The batch might hold fewer rows than the calibrated 
     table, so weigh a difference against the number of rows it is measured on before reporting it. 
@@ -221,13 +236,15 @@ def _parse_response_to_log(resp: list[Any], run_number: int = 1) -> None:
     for block in resp:
         if block.type == "text" and "**OUTPUT**" in block.text:
 
+            # The agent sometimes quotes **OUTPUT** several times, as it keeps thinking whilst writing.
+            # Reading the last block from the response.
             if "### **FEEDBACK**" in block.text:
                 agent_logs, feedback_log = block.text.split("### **FEEDBACK**")
-                agent_logs = agent_logs.split("**OUTPUT**")[1].strip().split("\n")
+                agent_logs = agent_logs.split("**OUTPUT**")[-1].strip().split("\n")
                 feedback_log = [f.strip() for f in feedback_log.split("\n") if f != ""]
                 _append_feedback_log(feedback_log=feedback_log)
             else:
-                agent_logs = block.text.split("**OUTPUT**")[1].strip().split("\n")
+                agent_logs = block.text.split("**OUTPUT**")[-1].strip().split("\n")
 
             for a_log in agent_logs:
                 if a_log.strip() == "":
