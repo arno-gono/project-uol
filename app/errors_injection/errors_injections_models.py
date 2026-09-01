@@ -415,10 +415,17 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
         # case not covered by this function)
         return values_distribution["min"] != values_distribution["max"]
 
+    # Excluding primary and foreign key columns as it conflicts with other types of injections.
+    foreign_keys = {}
+
+    if "potential_foreign_key" in d_calibration:
+        foreign_keys = d_calibration["potential_foreign_key"]
+
     # Numerical columns that are not keys and that the calibration measured a spread for
     numerical_columns = [col for col, details in d_calibration["columns_details"].items()
                          if details["datatype"] in ["int", "float"]
                          and details["potential_primary_key"] is False
+                         and col not in foreign_keys
                          and _has_spread(details["values_distribution"])
                          and col in df.columns]
 
@@ -564,10 +571,17 @@ def inject_out_of_range(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, d
             return False
         return True
 
+    # No out_of_range of primary or foreign key columns as it conflicts with other types of injections.
+    foreign_keys = {}
+
+    if "potential_foreign_key" in d_calibration:
+        foreign_keys = d_calibration["potential_foreign_key"]
+
     # Numerical columns that are not keys and that the calibration recorded bounds for
     numerical_columns = [col for col, details in d_calibration["columns_details"].items()
                          if details["datatype"] in ["int", "float"]
                          and details["potential_primary_key"] is False
+                         and col not in foreign_keys
                          and _has_bounds(details["values_distribution"])
                          and col in df.columns]
 

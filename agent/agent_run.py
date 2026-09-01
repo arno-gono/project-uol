@@ -118,8 +118,22 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     
     The calibrated tables might contain a lot of data. Refer to the calibration file rather than selecting all rows
     from these tables. You can occasionally query the calibrated tables during an investigation, but in this case 
-    use a COUNT, AVG, GROUP BY or LIMIT in your statement. 
-    
+    use a COUNT, AVG, GROUP BY or LIMIT in your statement.
+
+    ### **HOW TO MEASURE**
+
+    The calibration already holds the correlations and the distribution of every column, so read the calibrated
+    figure from it rather than recomputing it. Only the _new_data batch has to be measured. SQLite has no CORR,
+    STDDEV or VARIANCE, but sqrt() and pow() do exist, so a standard deviation and a correlation can both be
+    worked out from SUM, AVG and COUNT in a single query.
+
+    typeof() and the declared schema cannot be used to find a wrong_datatype: they always agree with the
+    calibration. Look at the shape of the values instead: a column calibrated as text holding entries that read
+    as numbers, or a column calibrated as a number holding entries that do not, is a wrong_datatype.
+
+    A repeated key does not say on its own which anomaly it is. Check whether the whole row is duplicated or not
+    before calling it a duplicate_primary_key.
+
     ### **OUTPUT**
     
     End your investigation with a section starting with ### **OUTPUT**, one finding per line, no line breaks, strictly 
