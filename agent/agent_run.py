@@ -25,9 +25,9 @@ def _count_error_types(details: list) -> dict[str, int]:
     return {error_type: error_types.count(error_type) for error_type in sorted(set(error_types))}
 
 
-def _previous_runs_section(kaggle_dataset: str, agent_model: str) -> str:
+def _previous_runs_section(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> str:
 
-    # Reformatting previous reconciliation logs to guide the agent in its investigation and find more accurate answers.
+    # Reformatting previous reconciliation logs into a table showing percentage of success on the previous runs.
 
     # Getting previous investigations results (reconciliations) for the selected database and model used.
     prev_recs = get_all_reconciliation_logs(dataset_name=kaggle_dataset, agent_model=agent_model)
@@ -35,45 +35,59 @@ def _previous_runs_section(kaggle_dataset: str, agent_model: str) -> str:
     if prev_recs is None:
         return ""
 
-    count_investigation = 1
-
-    # Formatting the logs into a prompt.
-    prompt_recs = """
-    Methodology:
-    - Nb diagnostics: number of diagnostics made by the agent. 
-    - Nb anomalies: number of actual errors that were in the dataset.
-    - Nb anomalies found: number of anomalies that were found by the agent.
-    - Error types found: number of anomalies found by the agent, per type of error.
-    - Error types not found: number of anomalies missed by the agent, per type of error.
-    - Error types incorrectly diagnosed: number of incorrect diagnostics made by the agent, per type of error.
-
-    The columns and the tables the anomalies were on are left out on purpose: every run is given its own random
-    set of anomalies, so a check that keeps missing is worth repeating, the column it was missed on is not.
-    """
+    # Calculating the percentage of errors found by the agent.
+    nb_found = {error_type: 0 for error_type in ERROR_TYPES_DICT}
+    nb_introduced = {error_type: 0 for error_type in ERROR_TYPES_DICT}
 
     for rec in prev_recs:
-        temp_rec_prompt = f"""
-    ***INVESTIGATION {count_investigation}***
-    - Nb diagnostics: {rec['total_diagnostics_made_by_agent']}
-    - Nb anomalies: {rec['total_anomalies']}
-    - Nb anomalies found: {rec['total_anomalies_detected_by_agent']}
-    - Error types found: {_count_error_types(details=rec['anomalies_detected_by_agent'])}
-    - Error types not found: {_count_error_types(details=rec['anomalies_not_found_by_agent'])}
-    - Error types incorrectly diagnosed: {_count_error_types(details=rec['incorrect_diagnostics_made_by_agent'])}
-    """
+        # Incrementing the count of errors found by the agent
+        for error_type, count in _count_error_types(details=rec["anomalies_detected_by_agent"]).items():
+            nb_found[error_type] += count
+            nb_introduced[error_type] += count
 
-        # Adding the investigation's prompt to the main one and incrementing the counter.
-        prompt_recs += temp_rec_prompt
-        count_investigation += 1
+        # Incrementing the count of errors not found by the agent
+        for error_type, count in _count_error_types(details=rec["anomalies_not_found_by_agent"]).items():
+            nb_introduced[error_type] += count
+
+    # Scoring every type of error: found / (found + introduced)
+    scores = []
+
+    for error_type in ERROR_TYPES_DICT:
+        found = nb_found[error_type]
+        introduced = nb_introduced[error_type]
+
+        rate = found / introduced if introduced != 0 else 1
+
+        scores.append({"error_type": error_type, "found": found, "introduced": introduced, "rate": rate})
+
+    # Converting scores into a prompt. Starting with the least successful first so it is coming on top.
+    prompt_recs = ""
+
+    for score in sorted(scores, key=lambda x: x["rate"]):
+
+        if score["introduced"] == 0:
+            temp_score_prompt = f"\n\t- {score['error_type']}: never introduced in a previous run"
+        else:
+            temp_score_prompt = (f"\n\t- {score['error_type']}: found {score['found']} out of the "
+                                 f"{score['introduced']} times it was introduced ({score['rate']:.0%})")
+
+        # Adding the score to the main prompt.
+        prompt_recs += temp_score_prompt
 
     prompt = f"""
     ### **PREVIOUS RUNS**
 
-    Below are previous runs on this database, crosschecked against the anomalies that had actually been introduced.
-    Use them both ways: chase an anomaly that keeps being missed, and stop making a diagnostic that keeps coming
-    back as incorrect. An incorrect diagnostic matched no anomaly introduced, but a real anomaly reported under the
-    wrong name counts as one too: check the naming rules above before abandoning the check that produced it.
-    Over-reporting costs as much as missing, so report on the evidence, never to widen the net.
+    Below is how often you found each type of anomaly when it had actually been introduced, measured over previous
+    runs on this database and crosschecked against the anomalies that had been introduced. A check that keeps missing
+    is worth repeating.
+
+    It should be read as a weakness in your method, not as a guiding rule on how to investigate: the anomalies come
+    randomly for every run and not all errors will be present. It says how well you checked, not what errors is to be
+    found.
+
+    Investigate every type of anomaly on every table you can apply to, whatever the rate below says. Where the rate is
+    low, the checks performed in the past runs were not sufficient. Base your analysis on evidence and measurement.
+
     {prompt_recs}
     """
 
@@ -120,6 +134,9 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     from these tables. You can occasionally query the calibrated tables during an investigation, but in this case 
     use a COUNT, AVG, GROUP BY or LIMIT in your statement.
 
+    A measurement that has already been made does not need to be made again: rerunning a count that is settled
+    spends a round that another column still needs.
+
     ### **HOW TO MEASURE**
 
     The calibration already holds the correlations and the distribution of every column, so read the calibrated
@@ -127,12 +144,19 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     STDDEV or VARIANCE, but sqrt() and pow() do exist, so a standard deviation and a correlation can both be
     worked out from SUM, AVG and COUNT in a single query.
 
+    A distribution_shift is found by measuring the mean and the standard deviation of the batch and comparing both
+    against the calibrated ones, column by column. Same for correlation_break.
+
     typeof() and the declared schema cannot be used to find a wrong_datatype: they always agree with the
     calibration. Look at the shape of the values instead: a column calibrated as text holding entries that read
     as numbers, or a column calibrated as a number holding entries that do not, is a wrong_datatype.
 
     A repeated key does not say on its own which anomaly it is. Check whether the whole row is duplicated or not
     before calling it a duplicate_primary_key.
+
+    A correlation_break has its mean and spread relatively close to the calibrated ones. Only the correlation with
+    an other column starts drifting. If the mean or the spread drift: it should be a distribution_shift, reported on 
+    the column where the drift is witnessed.
 
     ### **OUTPUT**
     
@@ -162,6 +186,7 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     so they can be parsed. Only create a new name if none of them describes what you found.
     
     {error_types}
+
     {_previous_runs_section(kaggle_dataset=kaggle_dataset, agent_model=agent_model)}    
     ### **FEEDBACK**
     

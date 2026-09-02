@@ -45,7 +45,7 @@ def main(
 
     # Checking agent's findings against what was actually injected
     if reconcile_agent_vs_injection:
-        reconcile_agent_vs_injection_logs(usage_id=usage_id)
+        dict_rec = reconcile_agent_vs_injection_logs(usage_id=usage_id)
 
     return None
 
