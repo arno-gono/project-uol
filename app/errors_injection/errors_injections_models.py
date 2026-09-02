@@ -349,11 +349,18 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
     d_calibration = get_calibration_file_as_dict()
     d_calibration = d_calibration[table_name]
 
+    # Keys are left out of the pairs: conflicting with other errors like missing parent key
+    keys = [col for col, details in d_calibration["columns_details"].items() if details["potential_primary_key"]]
+
+    if "potential_foreign_key" in d_calibration:
+        keys += list(d_calibration["potential_foreign_key"])
+
     # Keeping the pairs that are correlated enough for a break to be measurable, and whose two columns
-    # are both still in the dataframe
+    # are both still in the dataframe and are not keys
     correlated_pairs = [pair for pair, correlation in d_calibration["correlations"].items()
                         if abs(correlation) >= min_correlation
-                        and all(col.strip() in df.columns for col in pair.split("|"))]
+                        and all(col.strip() in df.columns for col in pair.split("|"))
+                        and not any(col.strip() in keys for col in pair.split("|"))]
 
     if not correlated_pairs:
         return None

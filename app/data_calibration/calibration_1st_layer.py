@@ -208,7 +208,11 @@ def _get_profile_cardinality_distribution(pd_series: pd.Series) -> dict[Any, flo
     return None
 
 
-def _is_primary_key(pd_series: pd.Series) -> bool:
+def _is_primary_key(pd_series: pd.Series, datatype: str | None) -> bool:
+    # Considering that a float is never used as a key. This excludes fields like longitude / latitude for example.
+    if datatype == "float":
+        return False
+
     # If all values are unique, the column might be a potential primary key
     # Getting unique values of the column
     unique_values = _get_column_unique_values(pd_series)
@@ -252,10 +256,13 @@ def _get_metadata_profiling_from_table(table_name: str, co: sqlite3.Connection) 
     dict_metadata["columns_details"] = {}
 
     for col_name, dtype in df.dtypes.items():
+        # Getting the column's datatype
+        datatype = _get_profile_datatype(dtype, df[col_name])
+
         # Columns' metadata are stored in a dictionary and then aggregated to the table's metadata dictionary
-        dict_column: dict[str, Any] = {"datatype": _get_profile_datatype(dtype, df[col_name]),
+        dict_column: dict[str, Any] = {"datatype": datatype,
                                        "cardinality_distribution": _get_profile_cardinality_distribution(df[col_name]),
-                                       "potential_primary_key": _is_primary_key(df[col_name]),
+                                       "potential_primary_key": _is_primary_key(df[col_name], datatype),
                                        "null_values": _is_null_allowed(df[col_name]),
                                        "values_distribution": _get_distribution_for_numerical_fields(col_name, df_dist)}
 

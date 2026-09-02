@@ -128,8 +128,11 @@ def test_get_profile_cardinality_distribution():
 
 
 def test_is_primary_key():
-    assert _is_primary_key(pd.Series(["a", "b", "c"])) is True
-    assert _is_primary_key(pd.Series(["a", "b", "b"])) is False
+    assert _is_primary_key(pd.Series(["a", "b", "c"]), "str") is True
+    assert _is_primary_key(pd.Series(["a", "b", "b"]), "str") is False
+
+    # A float is not a key even when every one of its values is unique
+    assert _is_primary_key(pd.Series([1.1, 2.2, 3.3]), "float") is False
 
 
 def test_is_null_allowed():
