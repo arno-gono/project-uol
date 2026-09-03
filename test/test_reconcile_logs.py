@@ -15,8 +15,8 @@ def _record(id_: int, table: str = "TABLE_A", column: str = "COLUMN_A",
 
 
 def test_compare_lists_matches_on_required_keys():
-    injected = [_record(1)]
-    diagnostics = [_record(2)]
+    injected = [_record(id_=1)]
+    diagnostics = [_record(id_=2)]
 
     # Same table, column and anomaly: the injected error is considered found by the agent
     assert _compare_lists(list1=injected, list2=diagnostics) == [
@@ -25,19 +25,19 @@ def test_compare_lists_matches_on_required_keys():
 
 
 def test_compare_lists_no_match_when_a_required_key_differs():
-    injected = [_record(1)]
+    injected = [_record(id_=1)]
 
     # Each diagnostic is right on 2 of the 3 required keys, which is not enough to be a match
-    assert _compare_lists(list1=injected, list2=[_record(2, table="TABLE_B")]) == []
-    assert _compare_lists(list1=injected, list2=[_record(2, column="COLUMN_B")]) == []
-    assert _compare_lists(list1=injected, list2=[_record(2, anomaly="duplicate_rows")]) == []
+    assert _compare_lists(list1=injected, list2=[_record(id_=2, table="TABLE_B")]) == []
+    assert _compare_lists(list1=injected, list2=[_record(id_=2, column="COLUMN_B")]) == []
+    assert _compare_lists(list1=injected, list2=[_record(id_=2, anomaly="duplicate_rows")]) == []
 
 
 def test_compare_lists_ignores_column_when_one_side_is_empty():
     # Some errors are not tied to a column (duplicated rows for example), so an empty column on either
     # side is skipped and the match is decided on the table and the anomaly only
-    injected = [_record(1, column="", anomaly="duplicate_rows")]
-    diagnostics = [_record(1, column="COLUMN_A", anomaly="duplicate_rows")]
+    injected = [_record(id_=1, column="", anomaly="duplicate_rows")]
+    diagnostics = [_record(id_=1, column="COLUMN_A", anomaly="duplicate_rows")]
 
     assert _compare_lists(list1=injected, list2=diagnostics) == [
         {"id1": 1, "id2": 1, "nb_rows_affected": True}
@@ -48,3 +48,16 @@ def test_compare_lists_ignores_column_when_one_side_is_empty():
         {"id1": 1, "id2": 1, "nb_rows_affected": True}
     ]
 
+
+def test_compare_lists_flags_the_number_of_rows_affected():
+    injected = [_record(id_=1, nb_rows_affected=10)]
+
+    # The agent logs its findings as strings, the injection logs hold integers: both are cast before comparing
+    assert _compare_lists(list1=injected, list2=[_record(id_=2, nb_rows_affected="10")]) == [
+        {"id1": 1, "id2": 2, "nb_rows_affected": True}
+    ]
+
+    # A match on the anomaly still stands when the agent sized it wrong, only the bonus is lost
+    assert _compare_lists(list1=injected, list2=[_record(id_=2, nb_rows_affected=11)]) == [
+        {"id1": 1, "id2": 2, "nb_rows_affected": False}
+    ]

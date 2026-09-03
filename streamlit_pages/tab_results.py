@@ -25,7 +25,7 @@ def _get_investigations_dataframe() -> pd.DataFrame:
     return df_recs
 
 
-def _section_user_input(df_recs: pd.DataFrame) -> list:
+def _section_user_input(df_recs: pd.DataFrame) -> list[str]:
     """
         User Inputs: the dataset can be chosen in the sidebar. Other filters:
           - Model used
@@ -100,7 +100,7 @@ def _section_cost_evolution(df_recs: pd.DataFrame) -> None:
 ERROR_TYPE_STATUS_COLOURS = {"found": "green", "missed": "red", "mixed": "orange"}
 
 
-def _get_error_type_status(found: list, not_found: list, error_type: str) -> str:
+def _get_error_type_status(found: list[str], not_found: list[str], error_type: str) -> str:
     # The same error can be injected several times in the same run. A "found" is only met when this error has been
     # found every single time by the agent. It is missed when the agent could never find it. Otherwise, it
     #  is "mixed"

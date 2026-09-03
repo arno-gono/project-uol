@@ -48,6 +48,7 @@ def test_calc_score_from_log_false_positives():
     d_rec = {
         "total_anomalies": 1,
         "total_anomalies_detected_by_agent": 1,
+        "total_correct_nb_rows_affected": 0,
         "incorrect_diagnostics_made_by_agent": [
             "orphan_foreign_key | listing_id | reviews | High",
             "orphan_foreign_key | listing_id | calendar | Critical",
@@ -60,8 +61,20 @@ def test_calc_score_from_log_false_positives():
     d_rec = {
         "total_anomalies": 8,
         "total_anomalies_detected_by_agent": 1,
+        "total_correct_nb_rows_affected": 0,
         "incorrect_diagnostics_made_by_agent": []
     }
 
     assert _calc_score_from_log(d_rec=d_rec) == 0.125
 
+
+def test_calc_score_from_log_correct_nb_rows_affected():
+    # 2 anomalies out of 4 found, and the agent sized 1 of them right (+0.05)
+    d_rec = {
+        "total_anomalies": 4,
+        "total_anomalies_detected_by_agent": 2,
+        "total_correct_nb_rows_affected": 1,
+        "incorrect_diagnostics_made_by_agent": []
+    }
+
+    assert _calc_score_from_log(d_rec=d_rec) == 0.55

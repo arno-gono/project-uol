@@ -1,7 +1,6 @@
 import random
 import numpy as np
 from typing import Any
-from pandas import DataFrame
 from app.config import KAGGLE_DATASET_NAME
 from app.data.sqlite_connector import connecting_to_sqlite
 from app.data.utils import get_calibration_file_as_dict, read_column_from_whole_dataset
@@ -11,8 +10,7 @@ import pandas as pd
 
 
 @skip_failed_injection
-def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[
-    str, str | float | int | list[Any] | Any]] | None:
+def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
 
     # Inserting another datatype in one column of the test data
     available_datatypes = ["int", "float", "bool", "str", "datetime"]
@@ -87,7 +85,7 @@ def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[DataFrame,
 
 
 @skip_failed_injection
-def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, float | Any]]:
+def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]]:
 
     # Get the calibration file as a dictionary
     d_calibration = get_calibration_file_as_dict()
@@ -126,7 +124,7 @@ def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str
 
 
 @skip_failed_injection
-def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[Any] | float]]:
+def inject_duplicate_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
     # Choosing a random number of rows that will be duplicated
     threshold_duplicate = random.random()
 
@@ -152,7 +150,7 @@ def inject_duplicate_rows(df: pd.DataFrame) -> tuple[DataFrame, dict[str, list[A
 
 
 @skip_failed_injection
-def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int | Any]] | None:
+def inject_new_column(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Choosing a random column
     col_error = random.choice(df.columns)
     name_new_column = f"NEW_{col_error}"
@@ -175,7 +173,7 @@ def inject_new_column(df: pd.DataFrame) -> tuple[DataFrame, dict[str, str | int 
     return df, params
 
 
-def _get_primary_keys(table_name: str, col_name: str) -> set:
+def _get_primary_keys(table_name: str, col_name: str) -> set[Any]:
     co_test = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="test")
     co_clean = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="clean")
     col_values = read_column_from_whole_dataset(table_name, col_name, co_clean, co_test)
@@ -185,7 +183,7 @@ def _get_primary_keys(table_name: str, col_name: str) -> set:
 
 
 @skip_failed_injection
-def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Breaking a foreign key: the key points to a parent that does not exist.
 
     # Get the calibration file as a dictionary
@@ -290,7 +288,7 @@ def inject_orphan_foreign_key(df: pd.DataFrame, table_name: str) -> tuple[DataFr
 
 
 @skip_failed_injection
-def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Inserting a category that was not seen at calibration time, impacting cardinality distribution.
     available_labels = ["UNKNOWN", "N/A", "-99999", "TO_BE_DEFINED", "OTHER", "Not available", "Not applicable"]
 
@@ -340,7 +338,7 @@ def inject_new_category(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, d
 
 
 @skip_failed_injection
-def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Shuffling the values of one column that has high correlation with another column. Distribution and cardinality
     # for the shuffled value stays the same, but the correlation with the column it is correlated with is impacted
     min_correlation = 0.3
@@ -401,7 +399,7 @@ def inject_correlation_break(df: pd.DataFrame, table_name: str) -> tuple[DataFra
 
 
 @skip_failed_injection
-def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Shifting a numerical column by x standard deviation, affecting both the standard deviation of the data but also
     # the mean if the data is moved toward a single direction. The function handles both cases.
     available_nb_std = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
@@ -512,7 +510,7 @@ def inject_distribution_shift(df: pd.DataFrame, table_name: str) -> tuple[DataFr
 
 
 @skip_failed_injection
-def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Giving a few rows a primary key that another row already uses.
 
     # Get the calibration file as a dictionary
@@ -565,7 +563,7 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[Dat
 
 
 @skip_failed_injection
-def inject_out_of_range(df: pd.DataFrame, table_name: str) -> tuple[DataFrame, dict[str, Any]] | None:
+def inject_out_of_range(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Creates values past the minimum / maximum recorded at calibration.
 
     # Get the calibration file as a dictionary
@@ -725,7 +723,7 @@ ERROR_TYPES_DICT = {
 
 
 class ErrorInjectionsModels:
-    def __init__(self):
+    def __init__(self) -> None:
 
         self.df = None
         self.table_name = None
