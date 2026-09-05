@@ -109,15 +109,57 @@ def _append_reconciliation_log(d_rec: dict[str, Any]) -> None:
     return None
 
 
+def _filter_records_for_run(records: list[dict[str, Any]], run_number: int,
+                            params_key: str) -> list[dict[str, Any]]:
+    # The injection logs and the agent logs have the same dictionary shape under different keys.
+    # Only the run being reconciled is kept.
+    return [record[params_key] for record in records if record["run_number"] == run_number]
+
+
+def _get_found_and_missed_ids(matches: list[dict[str, Any]],
+                              injections: list[dict[str, Any]]) -> tuple[list[int], list[int]]:
+    # A match holds the id of the injected error as "id1". Every injected error missing from that list is an
+    # anomaly the agent did not find.
+    ids_found = [err_found["id1"] for err_found in matches]
+    ids_not_found = [err_inj["id"] for err_inj in injections if err_inj["id"] not in ids_found]
+
+    return ids_found, ids_not_found
+
+
+def _get_false_positive_ids(matches: list[dict[str, Any]], investigations: list[dict[str, Any]]) -> list[int]:
+    # A match holds the id of the agent's diagnostic as "id2". A diagnostic matching no injected error is
+    # a false positive.
+    diagnostic_ids_found = [err_found["id2"] for err_found in matches]
+
+    return [diagnostic["id"] for diagnostic in investigations if diagnostic["id"] not in diagnostic_ids_found]
+
+
+def _describe_injected_anomalies(injections: list[dict[str, Any]], ids: list[int]) -> list[str]:
+    # Building a memory that will be passed on to the agent. Storing error type | column name | table name
+    return [f"{err_inj['error_type']} | "
+            f"{err_inj['dict_rec']['column']} | "
+            f"{err_inj['table_name']}"
+            for err_inj in injections if err_inj["id"] in ids]
+
+
+def _describe_incorrect_diagnostics(investigations: list[dict[str, Any]], ids: list[int]) -> list[str]:
+    # Same format as the injected anomalies, with the severity the agent gave the diagnostic added to it
+    return [f"{diagnostic['params']['anomaly']} | "
+            f"{diagnostic['params']['column']} | "
+            f"{diagnostic['params']['table']} | "
+            f"{diagnostic['params']['severity']}"
+            for diagnostic in investigations if diagnostic["id"] in ids]
+
+
 def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None = None) -> dict[str, Any]:
     dict_agent = json.load(open(AGENT_LOG_DIR))
     dict_inj = json.load(open(INJECTION_LOG_DIR))
 
-    all_inj_errors = [inj_errors["dict_rec"]
-                      for inj_errors in dict_inj["injections"] if inj_errors["run_number"] == run_number]
+    all_inj_errors = _filter_records_for_run(records=dict_inj["injections"], run_number=run_number,
+                                             params_key="dict_rec")
 
-    all_agents_diagnostics = [investigation["params"]
-                              for investigation in dict_agent["investigation"] if investigation["run_number"] == run_number]
+    all_agents_diagnostics = _filter_records_for_run(records=dict_agent["investigation"], run_number=run_number,
+                                                     params_key="params")
 
     # To be checked: those should be the same, no need to run that twice. Think about edge cases
     injected_errors_found_by_agents = _compare_lists(list1=all_inj_errors, list2=all_agents_diagnostics)
@@ -136,46 +178,19 @@ def reconcile_agent_vs_injection_logs(run_number: int = 1, usage_id: int | None 
           f"Errors not found: {nb_errors_not_found}, "
           f"Accurate number of rows affected: {correct_nb_rows_affected}")
 
-    # Building a memory that will be passed on to the agent. Storing error type | column name | table name
-    ids_found = [err_found["id1"] for err_found in injected_errors_found_by_agents]
-    ids_not_found = [err_inj["id"] for err_inj in dict_inj["injections"] if err_inj["id"] not in ids_found]
+    # Splitting the injected errors between the ones the agent found and the ones it missed
+    ids_found, ids_not_found = _get_found_and_missed_ids(matches=injected_errors_found_by_agents,
+                                                         injections=dict_inj["injections"])
 
-    diagnostic_id_found = [err_found["id2"] for err_found in injected_errors_found_by_agents]
-    diagnostic_false_positive_id = [diagnostic["id"]
-                                    for diagnostic in dict_agent["investigation"]
-                                    if diagnostic["id"] not in diagnostic_id_found]
+    # The diagnostics the agent made that were tied to no injected error
+    diagnostic_false_positive_ids = _get_false_positive_ids(matches=injected_errors_found_by_agents,
+                                                            investigations=dict_agent["investigation"])
 
-    # Listing the anomalies that were found by the agent
-    anomalies_found_by_agent = []
-
-    for err_found in injected_errors_found_by_agents:
-        for err_inj in dict_inj["injections"]:
-            if err_found["id1"] == err_inj["id"]:
-                anomalies_found_by_agent.append(
-                    f"{err_inj['error_type']} | "
-                    f"{err_inj['dict_rec']['column']} | "
-                    f"{err_inj['table_name']}")
-
-    # Listing the anomalies that were not found by the agent
-    anomalies_not_found_by_agent = []
-    for id_not_found in ids_not_found:
-        for err_inj in dict_inj["injections"]:
-            if err_inj["id"] == id_not_found:
-                anomalies_not_found_by_agent.append(
-                    f"{err_inj['error_type']} | "
-                    f"{err_inj['dict_rec']['column']} | "
-                    f"{err_inj['table_name']}")
-
-    # Listing the false positive the agent diagnosed but were wrong
-    incorrect_diagnostics_made_by_agent = []
-    for false_positive in diagnostic_false_positive_id:
-        for diagnostic in dict_agent["investigation"]:
-            if false_positive == diagnostic["id"]:
-                incorrect_diagnostics_made_by_agent.append(
-                    f"{diagnostic['params']['anomaly']} | "
-                    f"{diagnostic['params']['column']} | "
-                    f"{diagnostic['params']['table']} | "
-                    f"{diagnostic['params']['severity']}")
+    # Listing the anomalies that were found by the agent, the ones it missed, and the false positive it diagnosed
+    anomalies_found_by_agent = _describe_injected_anomalies(injections=dict_inj["injections"], ids=ids_found)
+    anomalies_not_found_by_agent = _describe_injected_anomalies(injections=dict_inj["injections"], ids=ids_not_found)
+    incorrect_diagnostics_made_by_agent = _describe_incorrect_diagnostics(
+        investigations=dict_agent["investigation"], ids=diagnostic_false_positive_ids)
 
     # Aggregating all data into one dict
     d_rec = {

@@ -1,5 +1,6 @@
 from agent.agent_api import ask_agent
 from typing import Any
+from pathlib import Path
 from app.config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR, AGENT_MODEL
 from datetime import datetime, timezone
 from app.errors_injection.errors_injections_models import ERROR_TYPES_DICT
@@ -17,7 +18,7 @@ error_types = "\n\t".join(f"- {error_name}: {details['description']}"
 # Writing a System prompt in order to not add it to the conversation every round of the investigation.
 # Doc: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#give-claude-a-role
 
-def _count_error_types(details: list) -> dict[str, int]:
+def _count_error_types(details: list[str]) -> dict[str, int]:
     # The details are logged as "error type | column | table", the column and the table being dropped here. Simplifying
     # task for the agent and avoid overfit: returning the error type only rather than the error type + column and table.
     error_types = [detail.split(" | ")[0].strip() for detail in details]
@@ -201,13 +202,13 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
 prompt_agent = "Investigate the database and report what you find."
 
 
-def _read_agent_logs(log_dir: str) -> dict[str, Any]:
+def _read_agent_logs(log_dir: Path) -> dict[str, Any]:
     with open(log_dir, "r") as f:
         d_logs = json.load(f)
     return d_logs
 
 
-def _save_agent_logs(d_logs: dict[str, Any], log_dir: str) -> None:
+def _save_agent_logs(d_logs: dict[str, Any], log_dir: Path) -> None:
     with open(log_dir, "w") as f:
         json.dump(d_logs, f, indent=4, default=str)
     return None

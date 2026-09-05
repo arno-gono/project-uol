@@ -2,15 +2,16 @@ from app.config import AGENT_MODEL, AGENT_MODELS_COSTS, AGENT_USAGE_DIR, KAGGLE_
     KAGGLE_TABLE_MAX_ROWS, AGENT_MAX_ROWS_RETURNED
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 
-def _read_usage_log() -> dict:
+def _read_usage_log() -> dict[str, Any]:
     with open(AGENT_USAGE_DIR, "r") as f:
         d_logs = json.load(f)
     return d_logs
 
 
-def _add_usage_to_log(**params) -> int:
+def _add_usage_to_log(**params: Any) -> int:
     d_logs = _read_usage_log()
 
     # Attributing an identifier
@@ -31,7 +32,7 @@ def _add_usage_to_log(**params) -> int:
     return params["id"]
 
 
-def calculate_costs(dict_costs: dict, agent_model: str = AGENT_MODEL) -> tuple[float, int]:
+def calculate_costs(dict_costs: dict[str, Any], agent_model: str = AGENT_MODEL) -> tuple[float, int]:
     """
         Expect a dict with the following keys:
             total_input_tokens

@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Any
 from app.config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED
 from app.data.utils import get_calibration_file_as_dict
 from app.data.sqlite_connector import connecting_to_sqlite
@@ -54,7 +55,7 @@ TOOLS = [
 ]
 
 
-def run_sql(query: str) -> dict:
+def run_sql(query: str) -> dict[str, Any]:
     # tool allowing to read the database.
     # Only allowing SELECT clauses to be run
 
@@ -82,7 +83,7 @@ def run_sql(query: str) -> dict:
     }
 
 
-def read_calibration(table_name: str) -> dict:
+def read_calibration(table_name: str) -> dict[str, Any]:
     # Allowing the agent to access the calibration file
     d_calibration = get_calibration_file_as_dict()
 
