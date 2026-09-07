@@ -2,7 +2,7 @@ from streamlit_pages.tab_investigation import (_parse_error_type_from_list, _cal
                                               _count_false_positives_by_severity)
 
 
-def test_parse_error_type():
+def test_parse_error_type() -> None:
     # The reconciliation logs store each anomaly as "error type | column | table", but the details
     # table only shows the error type
     anomalies = [
@@ -28,7 +28,7 @@ def test_parse_error_type():
 
 
 
-def test_count_false_positives_by_severity():
+def test_count_false_positives_by_severity() -> None:
     # The severity is the last criterion of the chain, and the agent is free on the casing it returns
     incorrect_diagnostics = [
         "orphan_foreign_key | listing_id | reviews | High",
@@ -43,7 +43,7 @@ def test_count_false_positives_by_severity():
         incorrect_diagnostics=incorrect_diagnostics, severity="Critical") == 1
 
 
-def test_calc_score_from_log_false_positives():
+def test_calc_score_from_log_false_positives() -> None:
     # 1 anomaly out of 1 found, but 1 High (-0.05) and 1 Critical (-0.1) false positive on top
     d_rec = {
         "total_anomalies": 1,
@@ -68,7 +68,7 @@ def test_calc_score_from_log_false_positives():
     assert _calc_score_from_log(d_rec=d_rec) == 0.125
 
 
-def test_calc_score_from_log_correct_nb_rows_affected():
+def test_calc_score_from_log_correct_nb_rows_affected() -> None:
     # 2 anomalies out of 4 found, and the agent sized 1 of them right (+0.05)
     d_rec = {
         "total_anomalies": 4,

@@ -1,3 +1,4 @@
+from typing import Any
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -9,7 +10,7 @@ from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
 load_dotenv()
 
 
-def ask_agent(user_input: str, system_prompt: str, agent_model: str = AGENT_MODEL) -> dict:
+def ask_agent(user_input: str, system_prompt: str, agent_model: str = AGENT_MODEL) -> dict[str, Any]:
     """
         Loop for the agent's investigation, which is a back and forth using Anthropic API.
 

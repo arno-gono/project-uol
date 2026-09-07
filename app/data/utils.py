@@ -1,3 +1,4 @@
+from typing import Any
 from app.config import DB_DIR, DB_NAME
 import json
 import sqlite3
@@ -12,7 +13,7 @@ def get_clean_or_test_csv_path(table_name: str, is_clean_table: bool = True) -> 
     return f"{DB_DIR}/{table_name}_{table_type}.csv"
 
 
-def get_calibration_file_as_dict() -> dict:
+def get_calibration_file_as_dict() -> dict[str, Any]:
     path_calibration_file = f"{DB_DIR}/{DB_NAME}.json"
     return json.load(open(path_calibration_file))
 

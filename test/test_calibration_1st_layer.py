@@ -4,7 +4,7 @@ from app.data_calibration import (_get_general_data, _get_profile_datatype, _is_
                                   _get_profile_cardinality_distribution, _is_primary_key,
                                   _is_null_allowed, _get_primary_key_columns, _get_fk_coverage)
 
-def test_get_general_data():
+def test_get_general_data() -> None:
     df = pd.DataFrame(
         {
             "COLUMN_A": [1, 2, 3],
@@ -39,7 +39,7 @@ def test_get_general_data():
     }
 
 
-def test_get_profile_datatype():
+def test_get_profile_datatype() -> None:
     df = pd.DataFrame(
         {
             "COLUMN_A": [1, 2, 3],
@@ -78,7 +78,7 @@ def test_get_profile_datatype():
     assert _get_profile_datatype(df["COLUMN_A"].dtype, df["COLUMN_A"]) is None
 
 
-def test_is_datetime_column():
+def test_is_datetime_column() -> None:
     # Dates written as strings are the case this function is meant to catch
     assert _is_datetime_column(pd.Series(["2020-01-01", "2021-06-05", "2022-12-31"])) is True
     assert _is_datetime_column(pd.Series(["alpha", "beta", "gamma"])) is False
@@ -86,7 +86,7 @@ def test_is_datetime_column():
     assert _is_datetime_column(pd.Series(["2020-01-01", "alpha", "2021-06-05", "beta"])) is False
 
 
-def test_get_cramers_v():
+def test_get_cramers_v() -> None:
     # COLUMN_A fully determines COLUMN_B, so the association is 1
     assert _get_cramers_v(pd.Series(["a", "a", "b", "b"]), pd.Series(["x", "x", "y", "y"])) == 1.0
 
@@ -94,7 +94,7 @@ def test_get_cramers_v():
     assert _get_cramers_v(pd.Series(["a", "a", "a", "a"]), pd.Series(["x", "x", "y", "y"])) == 0.0
 
 
-def test_get_correlation_dict():
+def test_get_correlation_dict() -> None:
     df = pd.DataFrame(
         {
             "COLUMN_A": [1, 2, 3, 4],
@@ -122,12 +122,12 @@ def test_get_correlation_dict():
     assert _get_correlation_dict(df) == {}
 
 
-def test_get_profile_cardinality_distribution():
+def test_get_profile_cardinality_distribution() -> None:
     # Categories are stored with the share of the rows they cover
     assert _get_profile_cardinality_distribution(pd.Series(["a", "a", "b", "c"])) == {"a": 0.5, "b": 0.25, "c": 0.25}
 
 
-def test_is_primary_key():
+def test_is_primary_key() -> None:
     assert _is_primary_key(pd.Series(["a", "b", "c"]), "str") is True
     assert _is_primary_key(pd.Series(["a", "b", "b"]), "str") is False
 
@@ -135,12 +135,12 @@ def test_is_primary_key():
     assert _is_primary_key(pd.Series([1.1, 2.2, 3.3]), "float") is False
 
 
-def test_is_null_allowed():
+def test_is_null_allowed() -> None:
     assert _is_null_allowed(pd.Series([1, 2, 3])) is False
     assert _is_null_allowed(pd.Series([1, None, 3])) is True
 
 
-def test_get_primary_key_columns():
+def test_get_primary_key_columns() -> None:
     dict_metadata = {
         "TABLE_A": {
             "columns_details": {
@@ -163,7 +163,7 @@ def test_get_primary_key_columns():
     }
 
 
-def test_get_fk_coverage():
+def test_get_fk_coverage() -> None:
     # Two of the three child values are found in the parent key
     assert _get_fk_coverage(child_series=pd.Series(["a", "b", "c", "x"]), parent_series=pd.Series(["a", "b", "c", "d"])) == 0.75
 

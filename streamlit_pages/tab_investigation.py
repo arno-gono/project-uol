@@ -57,12 +57,12 @@ def _section_user_input() -> None:
     return None
 
 
-def _parse_error_type_from_list(error_type_list: list) -> list:
+def _parse_error_type_from_list(error_type_list: list[str]) -> list[str]:
     all_errors = [t.split(" | ")[0].strip() for t in error_type_list]
     return all_errors
 
 
-def _count_false_positives_by_severity(incorrect_diagnostics: list, severity: str) -> int:
+def _count_false_positives_by_severity(incorrect_diagnostics: list[str], severity: str) -> int:
     # An incorrect diagnostic is stored as "error type | column | table | severity", the severity being
     # the last criterion of the chain
     all_severities = [d.split(" | ")[-1].strip().lower() for d in incorrect_diagnostics]

@@ -2,7 +2,7 @@ import pandas as pd
 from app.errors_injection import inject_new_column, inject_duplicate_rows
 
 
-def test_inject_new_column():
+def test_inject_new_column() -> None:
     df = pd.DataFrame(
         {
             "COLUMN_A": [1, 2, 3],
@@ -22,7 +22,7 @@ def test_inject_new_column():
     }
 
 
-def test_inject_duplicate_rows():
+def test_inject_duplicate_rows() -> None:
     df = pd.DataFrame(
         {
             "COLUMN_A": [1, 2, 3, 4, 5],

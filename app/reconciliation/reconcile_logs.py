@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import json
 
 
-def _compare_lists(list1: list[dict], list2: list[dict]) -> list[dict[str, Any]]:
+def _compare_lists(list1: list[dict[str, Any]], list2: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # Comparing if the elements (dictionaries) in list 1 are found in list 2. list1 and list2 have to have the same
     # structure, i.e. dictionaries with same keys to work.
 
