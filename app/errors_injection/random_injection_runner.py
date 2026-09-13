@@ -2,6 +2,7 @@ import random
 import pandas as pd
 import os
 from app.data.sqlite_connector import connecting_to_sqlite
+from app.data.views import create_sqlite_views
 from app.config import KAGGLE_DATASET_NAME, DB_DIR_AGENT
 from app.errors_injection.injection_logs import clean_injection_logs
 from app.errors_injection.errors_injections_models import ErrorInjectionsModels
@@ -83,6 +84,10 @@ def save_corrupted_data_for_agent(run_number: int, kaggle_dataset: str = KAGGLE_
     conn_clean.close()
     conn_test.close()
     conn_agent.close()
+
+    # Views are not copied with the tables above: creating them in the agent's database, as calibrated and with the
+    # new batch appended
+    create_sqlite_views(kaggle_dataset, database_type="agent")
 
     return
 

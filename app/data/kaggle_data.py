@@ -2,6 +2,7 @@ import kagglehub
 import pandas as pd
 import os
 from app.data.sqlite_connector import connecting_to_sqlite
+from app.data.views import create_sqlite_views
 from app.config import KAGGLE_DATASET_NAME, DB_DIR, DB_NAME, KAGGLE_TABLE_MAX_ROWS, DATA_CLEAN_TEST_SPLIT
 
 
@@ -82,40 +83,6 @@ def _upload_files_to_sqlite(path_kaggle_data: str, kaggle_dataset: str) -> None:
     return None
 
 
-def _create_sqlite_view(kaggle_dataset: str) -> None:
-    conn = connecting_to_sqlite(kaggle_dataset, database_type="clean")
-
-    # declare the view as a string
-
-    view_query = """
-                    CREATE VIEW v_test_table AS
-                    SELECT 
-                        CR.ID, 
-                        CR.MONTHS_BALANCE,
-                        CR.STATUS,
-                        AR.NAME_INCOME_TYPE,
-                        AR.NAME_FAMILY_STATUS
-                    FROM 
-                        CREDIT_RECORD CR
-                    LEFT JOIN
-                        APPLICATION_RECORD AR
-                    ON 
-                        CR.ID = AR.ID
-                    WHERE
-                        AR.NAME_FAMILY_STATUS = 'Married'
-                    LIMIT 50
-                """
-
-    # dropping the current view if it already exists
-    conn.execute("DROP VIEW IF EXISTS V_TEST_TABLE")
-
-    # now creating the view
-    conn.execute(view_query)
-
-    conn.close()
-    return None
-
-
 def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME) -> None:
 
     # downloading data into a default folder used by Kaggle as csv files,
@@ -128,8 +95,8 @@ def download_kaggle_upload_to_sqlite(kaggle_dataset: str = KAGGLE_DATASET_NAME) 
     # loading all csv files as db files - recreating a production environment
     _upload_files_to_sqlite(path_kaggle_data, kaggle_dataset)
 
-    # Run the following function create_sqlite_view(kaggle_dataset) to create a view. Make sure
-    # it is actually a view that works with the selected dataset
+    # creating a view on the specific dataset.
+    create_sqlite_views(kaggle_dataset, database_type="clean")
 
     return None
 
@@ -144,7 +111,7 @@ if __name__ == "__main__":
     # # check existing tables
     # print(pd.read_sql("SELECT name, type FROM sqlite_master", conn))
 
-    # _create_sqlite_view(KAGGLE_DATASET_NAME)
+    # create_sqlite_views(KAGGLE_DATASET_NAME, database_type="clean")
 
     # open a table / view as df
     # table_name = "v_test_table"
