@@ -27,6 +27,13 @@ def read_column_from_whole_dataset(table_name: str, col_name: str, co_clean: sql
     # Some primary keys might be split from the clean dataset when migrating Kaggle data to SQLite,
     # preventing from mapping the Foreign Keys accurately. Reading both clean and test data together.
     df_clean = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_clean)
+
+    # Views are only created in the clean database: a view has no test rows to read, only its clean values
+    df_objects_test = pd.read_sql("SELECT name FROM sqlite_master", co_test)
+
+    if table_name not in list(df_objects_test["name"]):
+        return df_clean[col_name]
+
     df_test = pd.read_sql(f"SELECT {col_name} FROM {table_name}", co_test)
 
     return pd.concat([df_clean, df_test])[col_name]

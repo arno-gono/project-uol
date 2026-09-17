@@ -73,7 +73,7 @@ AVAILABLE_MODELS = list(AGENT_MODELS_COSTS.keys())
 
 # Model the agent runs on by default, and a ceiling in tokens being used (cost control).
 AGENT_MODEL = "claude-haiku-4-5"
-AGENT_MAX_TOKENS = 3_000
+AGENT_MAX_TOKENS = 5_000
 
 # Maximum number of rows a single run_sql call can return (cost control). A tool result stays in the
 # conversation, so a whole table read is sent back to the API in every following round of the investigation.

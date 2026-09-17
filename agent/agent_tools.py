@@ -42,12 +42,15 @@ TOOLS = [
                        "The calibration was computed on the clean data, that is before the new rows were appended, "
                        "(i.e. tables ending with _new_data) and it describes what the table looked like when "
                        "it was known to be correct. "
-                       "Calling it with a name that was not calibrated returns the list of the tables that exist in the "
-                       "file, which is one way of finding out which tables exist.",
+                       "A view is calibrated the same way as a table and its name can be passed here too: this is the "
+                       "figure a _new_data view is to be compared against. "
+                       "Calling it with a name that was not calibrated returns the list of the names that exist in the "
+                       "file, which is one way of finding out what was calibrated.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "table_name": {"type": "string", "description": "Name of the table the data profile is wanted for"},
+                "table_name": {"type": "string",
+                               "description": "Name of the table or the view the data profile is wanted for"},
             },
             "required": ["table_name"],
         },

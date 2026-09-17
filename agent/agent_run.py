@@ -114,6 +114,10 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     You will need to check if there is nothing anomalous in this data by comparing it with the data that was calibrated.
     
     The new rows are in a table named after the calibrated one with a suffix "_new_data".
+
+    The database can also hold views (type "view" in sqlite_master). A view was calibrated on the clean data like a
+    table, but its "_new_data" version is not a batch on its own: it is the same view computed on the calibrated rows
+    and the new batch together, the way a report reads the data once the new batch is appended.
     
     ### **HOW TO INVESTIGATE**
     
@@ -125,6 +129,11 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     Keys are the exception: a primary or a foreign key belongs to the table as a whole, so check it against the
     calibrated table and its _new_data batch together. A row might point at a parent from an earlier batch and is not 
     an orphan in that case. A unique key in the new batch is still a duplicate if the calibrated table already uses it.
+
+    Views are the other exception: compare the _new_data version of a view against the calibration of that view, but
+    a difference there is only a symptom. Read the definition of the view in the column sql of sqlite_master, trace the
+    difference back to the tables and columns the view is built on, and report the anomaly on that table and column.
+    A view is never reported in the OUTPUT section.
 
     The new data will most likely slightly drift from the original data: there is no need to report 
     changes that are within limits to a reasonable tolerance. The batch might hold fewer rows than the calibrated 
@@ -160,8 +169,10 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     the column where the drift is witnessed.
 
     ### **OUTPUT**
-    
-    End your investigation with a section starting with ### **OUTPUT**, one finding per line, no line breaks, strictly 
+
+    Your answer is this section, and the FEEDBACK section below if you have any. Nothing else.
+
+    End your investigation with a section starting with ### **OUTPUT**, one finding per line, no line breaks, strictly
     in this format:
     
     Table name | Column Name | Anomaly | Calibrated | Current | Number of affected rows | Severity
@@ -192,14 +203,15 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     ### **FEEDBACK**
     
     Not directly related with the results of the investigation. 
-    Optional section where you can give feedback about how to improve the model: for example new tools to help investigate,
-    system prompt needing more accurate details or better guidance, or any other suggestions to optimise this model.  
+    Optional section where you can give feedback about how to improve the model: for example better guidance or more
+    accurate details in the system prompt, or any other suggestions to optimise this model. 
+    Asks for new tools will not be considered.  
     """
     return system_prompt_agent
 
 
 # The system prompt holds the instructions, so the user message only has to start the run.
-prompt_agent = "Investigate the database and report what you find."
+prompt_agent = "Investigate the database and report your findings in the OUTPUT section."
 
 
 def _read_agent_logs(log_dir: Path) -> dict[str, Any]:
