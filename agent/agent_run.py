@@ -1,7 +1,7 @@
 from agent.agent_api import ask_agent
 from typing import Any
 from pathlib import Path
-from app.config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR, AGENT_MODEL
+from app.config import AGENT_LOG_DIR, AGENT_FEEDBACK_DIR, AGENT_MODEL, AGENT_READS_ML_CALIBRATION
 from datetime import datetime, timezone
 from app.errors_injection.errors_injections_models import ERROR_TYPES_DICT
 from app.errors_injection.injection_logs import find_latest_id
@@ -95,6 +95,43 @@ def _previous_runs_section(kaggle_dataset: str, agent_model: str = AGENT_MODEL) 
     return prompt
 
 
+def _ml_calibration_bullet() -> str:
+
+    # THE SETUP lists what the calibration holds: the second layer is only announced when the tool returns it.
+    if not AGENT_READS_ML_CALIBRATION:
+        return ""
+
+    return "\n    - a clustering of the rows obtained with machine learning techniques"
+
+
+def _ml_calibration_section() -> str:
+
+    # The second layer describes a table as a whole rather than column by column, so it gets its own section.
+    # It names no anomaly to look for: there is no error type for a cluster.
+    if not AGENT_READS_ML_CALIBRATION:
+        return ""
+
+    prompt = """### **THE SECOND LAYER OF THE CALIBRATION**
+
+    For a table holding enough numerical columns, read_calibration also returns ml_calibration, which describes
+    the table as a whole rather than column by column. A table without enough numerical columns holds a sentence
+    there instead of a profile.
+
+    - disguised_missing_values: values that behaved as placeholders rather than as measurements in the clean data.
+    - pca: the columns carrying most of the variance, under main_columns, with the loading of each column on every
+    component. Two columns loading on the same component moved together while the data was known to be correct.
+    - kmeans: the clusters found on the clean rows, each with the share of the rows it held and its centroid.
+
+    These are figures like any other in the calibration and the batch can be measured against them with SQL, a
+    centroid being a set of column averages and a share being a count over a total. They say which columns are
+    worth measuring first and which ones were tied to each other. A difference here is not an anomaly on its own:
+    report the anomaly on the table and the column where it is witnessed, under one of the names listed below.
+
+    """
+
+    return prompt
+
+
 def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> str:
 
     system_prompt_agent = f"""You are a data quality analyst investigating a SQLite database.
@@ -106,8 +143,7 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     - total number of rows, number of duplicated rows
     - for every column: datatype, if it accepts NULLs, the distribution of its values and number of unique values
     - correlations between numeric columns, and associations between categorical ones
-    - columns that look like they could be primary or foreign keys
-    - a clustering of the rows obtained with machine learning techniques
+    - columns that look like they could be primary or foreign keys{_ml_calibration_bullet()}
     
     A new batch of data arrived, and will be appended to the relevant table: 
     they are currently kept separated from the main table. 
@@ -168,9 +204,9 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     an other column starts drifting. If the mean or the spread drift: it should be a distribution_shift, reported on 
     the column where the drift is witnessed.
 
-    ### **OUTPUT**
+    {_ml_calibration_section()}### **OUTPUT**
 
-    Your answer is this section, and the FEEDBACK section below if you have any. Nothing else.
+    Your answer is this section. Nothing else.
 
     End your investigation with a section starting with ### **OUTPUT**, one finding per line, no line breaks, strictly
     in this format:
@@ -189,7 +225,9 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     Table D |  | duplicate_rows | 0 duplicated rows | 145 duplicated rows | 145 | Critical
     
     - "Column Name" column: when an anomaly is measured on two columns, name both of them separated by "&",
-    as in the example above.
+    as in the example above. "&" is only for an anomaly that exists between a pair of columns, like a
+    correlation_break. When the same anomaly hits several columns on their own, write one line per column: three
+    inserted columns are three lines, never "Col A & Col B & Col C" on one line.
     - "Calibrated" and "Current" column: No need to have details. For example if the calibrated datatype is text and 
     you flag numeric entries, enter "Text values" for Calibrated and "Numeric values" for Current. If this is for a 
     correlation, enter "53.5" for Calibrated directly and "34.5" for Current if this is what you calculate. No need for
@@ -199,14 +237,17 @@ def _get_system_prompt(kaggle_dataset: str, agent_model: str = AGENT_MODEL) -> s
     
     {error_types}
 
-    {_previous_runs_section(kaggle_dataset=kaggle_dataset, agent_model=agent_model)}    
-    ### **FEEDBACK**
-    
-    Not directly related with the results of the investigation. 
-    Optional section where you can give feedback about how to improve the model: for example better guidance or more
-    accurate details in the system prompt, or any other suggestions to optimise this model. 
-    Asks for new tools will not be considered.  
-    """
+    {_previous_runs_section(kaggle_dataset=kaggle_dataset, agent_model=agent_model)}    """
+
+    # The FEEDBACK section is commented out for now. Paste it back at the end of the prompt above to restore it,
+    # _parse_response_to_log still reads a FEEDBACK section if the agent writes one.
+    # ### **FEEDBACK**
+    #
+    # Not directly related with the results of the investigation.
+    # Optional section where you can give feedback about how to improve the model: for example better guidance or more
+    # accurate details in the system prompt, or any other suggestions to optimise this model.
+    # Asks for new tools will not be considered.
+
     return system_prompt_agent
 
 

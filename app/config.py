@@ -66,6 +66,18 @@ AGENT_MODELS_COSTS = {
         "total_cache_read": 0.5,
         "total_cache_written": 6.25
     },
+    "claude-opus-5-5": {
+        "total_input_tokens": 4,
+        "total_output_tokens": 20,
+        "total_cache_read": 0.2,
+        "total_cache_written": 5
+    },
+    "claude-fable-5-1": {
+        "total_input_tokens": 10,
+        "total_output_tokens": 50,
+        "total_cache_read": 0.25,
+        "total_cache_written": 12.5
+    },
 }
 
 # A model can only be selected if its cost is known, so the choices offered are the models priced above.
@@ -73,7 +85,15 @@ AVAILABLE_MODELS = list(AGENT_MODELS_COSTS.keys())
 
 # Model the agent runs on by default, and a ceiling in tokens being used (cost control).
 AGENT_MODEL = "claude-haiku-4-5"
-AGENT_MAX_TOKENS = 5_000
+AGENT_MAX_TOKENS = 16_000
+
+# How much the model thinks, and so what it spends.
+AGENT_EFFORT = "high"
+AGENT_MODELS_WITH_EFFORT = ["claude-sonnet-5", "claude-opus-5", "claude-opus-5-5", "claude-fable-5-1"]
+
+# The second layer of the calibration (disguised missing values, PCA, clustering) is returned by read_calibration
+# only when this is True, which also adds it to the system prompt and to the tool's description.
+AGENT_READS_ML_CALIBRATION = False
 
 # Maximum number of rows a single run_sql call can return (cost control). A tool result stays in the
 # conversation, so a whole table read is sent back to the API in every following round of the investigation.

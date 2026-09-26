@@ -1,8 +1,13 @@
 import pandas as pd
 from typing import Any
-from app.config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED
+from app.config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED, AGENT_READS_ML_CALIBRATION
 from app.data.utils import get_calibration_file_as_dict
 from app.data.sqlite_connector import connecting_to_sqlite
+
+
+# The second layer is only described when the tool returns it, AGENT_READS_ML_CALIBRATION driving both.
+ML_CALIBRATION_DESCRIPTION = (", and a clustering of its rows obtained with machine learning techniques, under "
+                              "the key ml_calibration") if AGENT_READS_ML_CALIBRATION else ""
 
 
 # Available tools for the agent. Format as per Claude's Documentation.
@@ -38,7 +43,7 @@ TOOLS = [
         "description": "Return the calibration profile of one table: how many rows and duplicated rows it held, the "
                        "details of each of its columns (datatype, missing values, unique values, distribution), the "
                        "correlations and associations between those columns, the columns that are potential primary "
-                       "or foreign keys, and a clustering of the rows obtained with machine learning techniques. "
+                       f"or foreign keys{ML_CALIBRATION_DESCRIPTION}. "
                        "The calibration was computed on the clean data, that is before the new rows were appended, "
                        "(i.e. tables ending with _new_data) and it describes what the table looked like when "
                        "it was known to be correct. "
@@ -95,7 +100,10 @@ def read_calibration(table_name: str) -> dict[str, Any]:
         print(f"\t\033[91merror: {table_name} was not calibrated. Calibrated tables: {list(d_calibration.keys())}\033[0m")
         return {"error": f"{table_name} was not calibrated", "calibrated_tables": list(d_calibration.keys())}
 
-    # Testing cost without passing the ml_calibration part of the calibration file.
+    # The second layer is withheld unless AGENT_READS_ML_CALIBRATION is on, the rest of the profile going either way.
+    if AGENT_READS_ML_CALIBRATION:
+        return d_calibration[table_name]
+
     return {key: value for key, value in d_calibration[table_name].items() if key != "ml_calibration"}
 
 

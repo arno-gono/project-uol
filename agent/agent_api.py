@@ -2,7 +2,7 @@ from typing import Any
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
-from app.config import AGENT_MODEL, AGENT_MAX_TOKENS
+from app.config import AGENT_MODEL, AGENT_MAX_TOKENS, AGENT_EFFORT, AGENT_MODELS_WITH_EFFORT
 from agent.agent_tools import TOOLS, TOOLS_FUNCTIONS
 
 
@@ -39,6 +39,10 @@ def ask_agent(user_input: str, system_prompt: str, agent_model: str = AGENT_MODE
     # Create a client, reading ANTHROPIC_API_KEY from the .env file.
     client = Anthropic()
 
+    # Effort is only sent to the models that accept it, and only when one is set.
+    effort = ({"output_config": {"effort": AGENT_EFFORT}}
+              if AGENT_EFFORT and agent_model in AGENT_MODELS_WITH_EFFORT else {})
+
     # The API must have the whole conversation in each call.
     # All answers and calls are appended to the "messages" variable.
     # This means the longer the loop, the more expensive the investigation becomes.
@@ -65,7 +69,8 @@ def ask_agent(user_input: str, system_prompt: str, agent_model: str = AGENT_MODE
             cache_control={"type": "ephemeral"},
             system=system_prompt,
             tools=TOOLS,
-            messages=messages
+            messages=messages,
+            **effort
         )
 
         # Collecting tool_use blocks of the answer. Each one has to be run and the results

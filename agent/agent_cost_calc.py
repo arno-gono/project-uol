@@ -1,5 +1,5 @@
 from app.config import AGENT_MODEL, AGENT_MODELS_COSTS, AGENT_USAGE_DIR, KAGGLE_DATASET_NAME, \
-    KAGGLE_TABLE_MAX_ROWS, AGENT_MAX_ROWS_RETURNED
+    KAGGLE_TABLE_MAX_ROWS, AGENT_MAX_ROWS_RETURNED, AGENT_READS_ML_CALIBRATION
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -61,6 +61,7 @@ def calculate_costs(dict_costs: dict[str, Any], agent_model: str = AGENT_MODEL) 
     dict_costs["kaggle_table_max_rows"] = KAGGLE_TABLE_MAX_ROWS
     dict_costs["agent_max_sql_rows_read"] = AGENT_MAX_ROWS_RETURNED
     dict_costs["agent_model"] = agent_model
+    dict_costs["ml_calibration_available"] = AGENT_READS_ML_CALIBRATION
     dict_costs["notes"] = ""
 
     usage_id = _add_usage_to_log(**dict_costs)

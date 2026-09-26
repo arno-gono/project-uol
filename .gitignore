@@ -226,3 +226,4 @@ app/data/.DS_Store
 /app/db_agent
 /app/logs
 *.py~
+/app/archive_logs
