@@ -96,6 +96,54 @@ def _section_cost_evolution(df_recs: pd.DataFrame) -> None:
     return None
 
 
+def _build_model_summary(df_recs: pd.DataFrame) -> pd.DataFrame:
+    # One row per model, totals over every investigation of that model.
+    all_recs = df_recs.to_dict("records")
+
+    rows = []
+
+
+    for agent_model in df_recs["agent_model"].unique():
+        recs_model = [rec for rec in all_recs if rec["agent_model"] == agent_model]
+
+        found = sum(rec["total_anomalies_detected_by_agent"] for rec in recs_model)
+        injected = sum(rec["total_anomalies"] for rec in recs_model)
+        diagnostics = sum(rec["total_diagnostics_made_by_agent"] for rec in recs_model)
+
+        rows.append({
+            "agent_model": agent_model,
+            "runs": len(recs_model),
+            "found": found,
+            "injected": injected,
+            # Detection: errors found out of errors injected. Precision: errors found out of every diagnostic made.
+            # Left empty when there is nothing to divide by (a clean batch with no diagnostic).
+            "detection": found / injected if injected != 0 else None,
+            "precision": found / diagnostics if diagnostics != 0 else None,
+            "avg_cost": sum(rec["total_cost_usd"] for rec in recs_model) / len(recs_model)
+        })
+
+    return pd.DataFrame(rows).set_index("agent_model")
+
+
+def _section_model_summary(df_recs: pd.DataFrame) -> None:
+
+    st.subheader("Results by Model")
+
+    if df_recs.empty:
+        st.write("No investigation for the model(s) selected")
+        return None
+
+    df_summary = _build_model_summary(df_recs=df_recs)
+
+    st.dataframe(df_summary.style.format({
+        "detection": "{:.0%}",
+        "precision": "{:.0%}",
+        "avg_cost": "${:.2f}"
+    }))
+
+    return None
+
+
 # Colour scheme for the table showing evolution of errors spotted.
 ERROR_TYPE_STATUS_COLOURS = {"found": "green", "missed": "red", "mixed": "orange"}
 
@@ -140,6 +188,22 @@ def _colour_error_type_cell(status: Any) -> str:
     return f"background-color: {ERROR_TYPE_STATUS_COLOURS[status]}"
 
 
+def _display_error_type_matrix(df_recs: pd.DataFrame) -> None:
+    # Getting a table with investigations as columns and error types as rows with found/mixed/missed or nothing from
+    # the reconciliation logs.
+    df_matrix = _build_error_type_matrix(df_recs=df_recs)
+
+    # Replacing nan with nothing:
+    df_matrix = df_matrix.fillna("")
+
+    # The status is blanked out of the cells so that only the colour is read.
+    styler = df_matrix.style.map(_colour_error_type_cell).format(lambda v: "")
+
+    st.dataframe(styler)
+
+    return None
+
+
 def _section_error_types(df_recs: pd.DataFrame) -> None:
 
     st.subheader("Error Types Found by Investigation")
@@ -148,23 +212,18 @@ def _section_error_types(df_recs: pd.DataFrame) -> None:
         st.write("No investigation for the model(s) selected")
         return None
 
-    # Getting a table with investigations as columns and error types as rows with found/mixed/missed or nothing from
-    # the reconciliation logs.
-    df_matrix = _build_error_type_matrix(df_recs=df_recs)
-
-    # Replacing nan with nothing:
-    df_matrix = df_matrix.fillna("")
-
     # Legend on top of the table
     st.markdown(f'Legend: :color[found]{{background="{ERROR_TYPE_STATUS_COLOURS["found"]}"}} '
                 f':color[missed]{{background="{ERROR_TYPE_STATUS_COLOURS["missed"]}"}} '
                 f':color[partly found]{{background="{ERROR_TYPE_STATUS_COLOURS["mixed"]}"}}. '
                 f'An empty cell means the error type was not injected in that investigation.')
 
-    # The status is blanked out of the cells so that only the colour is read.
-    styler = df_matrix.style.map(_colour_error_type_cell).format(lambda v: "")
+    _display_error_type_matrix(df_recs=df_recs)
 
-    st.dataframe(styler)
+    # Same table per model, stacked right under the one holding every investigation so they can be read together.
+    for agent_model in sorted(df_recs["agent_model"].dropna().unique()):
+        st.write(agent_model)
+        _display_error_type_matrix(df_recs=df_recs[df_recs["agent_model"] == agent_model])
 
     return None
 
@@ -196,8 +255,11 @@ def tab_results_config() -> None:
     with col_chart_2:
         _section_cost_evolution(df_recs=df_filtered)
 
-    # Third section: which error types the agent finds and which ones it keeps missing, run after run
+    # Third section: detection, precision and cost per model, then which error types the agent finds and which ones
+    # it keeps missing, run after run
     st.divider()
+
+    _section_model_summary(df_recs=df_filtered)
 
     _section_error_types(df_recs=df_filtered)
 
