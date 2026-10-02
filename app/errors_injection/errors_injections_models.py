@@ -85,10 +85,12 @@ def inject_wrong_datatype(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFra
 
 
 @skip_failed_injection
-def inject_nulls(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]]:
+def inject_nulls(df: pd.DataFrame, table_name: str,
+                 d_calibration: dict[str, Any] | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
 
-    # Get the calibration file as a dictionary
-    d_calibration = get_calibration_file_as_dict()
+    # The calibration can be given directly, otherwise it is read from the file.
+    if d_calibration is None:
+        d_calibration = get_calibration_file_as_dict()
     d_calibration = d_calibration[table_name]
 
     # Listing all columns accepting NULLs
@@ -563,11 +565,13 @@ def inject_duplicate_primary_key(df: pd.DataFrame, table_name: str) -> tuple[pd.
 
 
 @skip_failed_injection
-def inject_out_of_range(df: pd.DataFrame, table_name: str) -> tuple[pd.DataFrame, dict[str, Any]] | None:
+def inject_out_of_range(df: pd.DataFrame, table_name: str,
+                        d_calibration: dict[str, Any] | None = None) -> tuple[pd.DataFrame, dict[str, Any]] | None:
     # Creates values past the minimum / maximum recorded at calibration.
 
-    # Get the calibration file as a dictionary
-    d_calibration = get_calibration_file_as_dict()
+    # The calibration can be given directly, otherwise it is read from the file.
+    if d_calibration is None:
+        d_calibration = get_calibration_file_as_dict()
     d_calibration = d_calibration[table_name]
 
     def _has_bounds(values_distribution: dict[str, Any] | None) -> bool:

@@ -1,4 +1,5 @@
 import pandas as pd
+import sqlite3
 from typing import Any
 from app.config import KAGGLE_DATASET_NAME, AGENT_MAX_ROWS_RETURNED, AGENT_READS_ML_CALIBRATION
 from app.data.utils import get_calibration_file_as_dict
@@ -63,7 +64,7 @@ TOOLS = [
 ]
 
 
-def run_sql(query: str) -> dict[str, Any]:
+def run_sql(query: str, conn: sqlite3.Connection | None = None) -> dict[str, Any]:
     # tool allowing to read the database.
     # Only allowing SELECT clauses to be run
 
@@ -74,7 +75,9 @@ def run_sql(query: str) -> dict[str, Any]:
     if not query.lower()[:6] == "select":
         return {"error": "only SELECT queries are allowed"}
 
-    conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="agent")
+    # A connection can be given directly, otherwise the agent's database is opened.
+    if conn is None:
+        conn = connecting_to_sqlite(KAGGLE_DATASET_NAME, database_type="agent")
 
     try:
         df = pd.read_sql(f"SELECT * FROM ({query}) LIMIT {AGENT_MAX_ROWS_RETURNED}", conn)
@@ -91,9 +94,10 @@ def run_sql(query: str) -> dict[str, Any]:
     }
 
 
-def read_calibration(table_name: str) -> dict[str, Any]:
-    # Allowing the agent to access the calibration file
-    d_calibration = get_calibration_file_as_dict()
+def read_calibration(table_name: str, d_calibration: dict[str, Any] | None = None) -> dict[str, Any]:
+    # Allowing the agent to access the calibration. It can be given directly, otherwise it is read from the file.
+    if d_calibration is None:
+        d_calibration = get_calibration_file_as_dict()
 
     if table_name not in d_calibration:
         # Listing what exists rather than just refusing, so the agent can correct itself
